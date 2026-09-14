@@ -3,12 +3,11 @@ import { randomUUID } from 'node:crypto'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { CH } from '../shared/ipc'
+import { SHELLS } from '../shared/state'
 import type { Store } from './store'
 import type { Tmux } from './tmux'
 import type { PtyManager } from './pty'
 import { listProjects } from './projects'
-
-const SHELLS = new Set(['zsh', 'bash', 'sh', 'fish', '-zsh', '-bash', 'login'])
 
 export function registerIpc(deps: { store: Store; tmux: Tmux; ptys: PtyManager; win: () => BrowserWindow | null }): void {
   const { store, tmux, ptys } = deps

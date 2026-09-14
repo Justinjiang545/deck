@@ -59,7 +59,7 @@ export function initialState(home: string): AppState {
   }
 }
 
-const SHELLS = new Set(['zsh', 'bash', 'sh', 'fish', '-zsh', '-bash', 'login'])
+export const SHELLS = new Set(['zsh', 'bash', 'sh', 'fish', '-zsh', '-bash', 'login'])
 
 export function titleOf(t: Terminal): string {
   if (t.customTitle) return t.customTitle
