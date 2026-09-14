@@ -40,6 +40,22 @@ describe('persist', () => {
     expect(existsSync(file)).toBe(false)
   })
 
+  it('prunes tabs, folder refs and derives layout from activeTabId', () => {
+    const file = join(dir, 'state.json')
+    writeFileSync(file, JSON.stringify({
+      terminals: { a: { id: 'a', createdAt: 1, cwd: '/', fgCommand: 'zsh', lastActivity: 1, cc: null, folderId: 'gone' } },
+      folders: {}, openTabs: ['a', 'zombie'], activeTabId: 'zombie', selectedFolderId: 'gone',
+      layout: { type: 'leaf', terminalId: 'zombie' }, focusedTerminalId: 'zombie', sidebarOpen: true, settings: {}
+    }))
+    const s = loadState(file, initialState(HOME))
+    expect(s.openTabs).toEqual(['a'])
+    expect(s.activeTabId).toBeNull()
+    expect(s.layout).toBeNull()
+    expect(s.focusedTerminalId).toBeNull()
+    expect(s.terminals['a']?.folderId).toBeUndefined()
+    expect(s.selectedFolderId).toBeNull()
+  })
+
   it('saver debounces and flush writes immediately', async () => {
     const file = join(dir, 'state.json')
     const saver = createSaver(file, 50)

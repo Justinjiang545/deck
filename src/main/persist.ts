@@ -1,22 +1,35 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
-import type { AppState } from '../shared/state'
+import type { AppState, Terminal } from '../shared/state'
 
 export function loadState(file: string, fallback: AppState): AppState {
   if (!existsSync(file)) return fallback
   try {
     const raw = JSON.parse(readFileSync(file, 'utf8')) as Partial<AppState>
     if (!raw || typeof raw !== 'object' || typeof raw.terminals !== 'object') throw new Error('bad shape')
+
+    const terminals: Record<string, Terminal> = {}
+    for (const [id, t] of Object.entries(raw.terminals ?? {})) {
+      if (t.folderId && !(raw.folders ?? {})[t.folderId]) {
+        const { folderId: _, ...rest } = t
+        terminals[id] = rest
+      } else {
+        terminals[id] = t
+      }
+    }
+    const openTabs = (raw.openTabs ?? []).filter((id) => terminals[id])
+    const activeTabId = raw.activeTabId && openTabs.includes(raw.activeTabId) ? raw.activeTabId : null
+
     return {
-      terminals: raw.terminals ?? {},
-      layout: raw.layout ?? null,
-      focusedTerminalId: raw.focusedTerminalId ?? null,
-      sidebarOpen: raw.sidebarOpen ?? true,
-      settings: { ...fallback.settings, ...(raw.settings ?? {}) },
+      terminals,
       folders: raw.folders ?? {},
-      openTabs: raw.openTabs ?? [],
-      activeTabId: raw.activeTabId ?? null,
-      selectedFolderId: raw.selectedFolderId ?? null
+      openTabs,
+      activeTabId,
+      selectedFolderId: raw.selectedFolderId && (raw.folders ?? {})[raw.selectedFolderId] ? raw.selectedFolderId : null,
+      layout: activeTabId ? { type: 'leaf', terminalId: activeTabId } : null,
+      focusedTerminalId: activeTabId,
+      sidebarOpen: raw.sidebarOpen ?? true,
+      settings: { ...fallback.settings, ...(raw.settings ?? {}) }
     }
   } catch {
     try { renameSync(file, file + '.bak') } catch { /* ignore */ }
