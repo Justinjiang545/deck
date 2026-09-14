@@ -1,0 +1,24 @@
+:root {
+  --bg: #0e0f11;
+  --surface: #15171a;
+  --border: #23262b;
+  --text: #d6d8dc;
+  --muted: #7b8089;
+  --accent: #7aa2f7;
+  --working: #e0af68;
+  --needs-you: #9ece6a;
+  --danger: #f7768e;
+  --font-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', Menlo, monospace;
+  --sidebar-w: 260px;
+}
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.4 var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+.app { height: 100%; display: flex; }
