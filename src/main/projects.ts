@@ -11,11 +11,13 @@ function isDir(p: string): boolean {
   try { return statSync(p).isDirectory() } catch { return false }
 }
 
+function safeReaddir(dir: string): string[] {
+  try { return readdirSync(dir) } catch { return [] }
+}
+
 function newestJsonl(dir: string): { file: string; mtime: number } | null {
   let best: { file: string; mtime: number } | null = null
-  let names: string[]
-  try { names = readdirSync(dir) } catch { return null }
-  for (const n of names) {
+  for (const n of safeReaddir(dir)) {
     if (!n.endsWith('.jsonl')) continue
     const f = join(dir, n)
     let mtime: number
@@ -25,11 +27,9 @@ function newestJsonl(dir: string): { file: string; mtime: number } | null {
   return best
 }
 
-export function projectPathFromCCDir(dir: string): string | null {
-  const j = newestJsonl(dir)
-  if (!j) return null
+function cwdFromJsonl(file: string): string | null {
   let head: string
-  try { head = readFileSync(j.file, 'utf8').slice(0, 64 * 1024) } catch { return null }
+  try { head = readFileSync(file, 'utf8').slice(0, 64 * 1024) } catch { return null }
   for (const line of head.split('\n')) {
     if (!line.trim()) continue
     try {
@@ -38,6 +38,12 @@ export function projectPathFromCCDir(dir: string): string | null {
     } catch { /* partial line at slice boundary */ }
   }
   return null
+}
+
+export function projectPathFromCCDir(dir: string): string | null {
+  const j = newestJsonl(dir)
+  if (!j) return null
+  return cwdFromJsonl(j.file)
 }
 
 export function listProjects(opts: {
@@ -59,12 +65,13 @@ export function listProjects(opts: {
 
   if (existsSync(opts.ccProjectsDir)) {
     const cc: { path: string; mtime: number }[] = []
-    for (const slug of readdirSync(opts.ccProjectsDir)) {
+    for (const slug of safeReaddir(opts.ccProjectsDir)) {
       const d = join(opts.ccProjectsDir, slug)
       if (!isDir(d)) continue
       const j = newestJsonl(d)
-      const path = j ? projectPathFromCCDir(d) : null
-      if (path && j) cc.push({ path, mtime: j.mtime })
+      if (!j) continue
+      const path = cwdFromJsonl(j.file)
+      if (path) cc.push({ path, mtime: j.mtime })
     }
     cc.sort((a, b) => b.mtime - a.mtime)
     for (const c of cc) push(c.path, 'cc')
@@ -72,7 +79,7 @@ export function listProjects(opts: {
 
   for (const root of opts.roots) {
     if (!isDir(root)) continue
-    for (const n of readdirSync(root).sort()) {
+    for (const n of safeReaddir(root).sort()) {
       if (n.startsWith('.')) continue
       push(join(root, n), 'root')
     }

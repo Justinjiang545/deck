@@ -45,4 +45,21 @@ describe('listProjects', () => {
   it('tolerates a missing cc dir and missing roots', () => {
     expect(listProjects({ ccProjectsDir: join(dir, 'nope'), roots: [join(dir, 'nope2')], recent: [] })).toEqual([])
   })
+  it('lists root subdirs alphabetically when there is no cc dir or recent list', () => {
+    const roots = join(dir, 'roots'); mkdirSync(roots)
+    for (const n of ['gamma', 'delta']) mkdirSync(join(roots, n))
+    const res = listProjects({ ccProjectsDir: join(dir, 'nope-cc'), roots: [roots], recent: [] })
+    expect(res.map((r) => [r.name, r.source])).toEqual([
+      ['delta', 'root'], ['gamma', 'root']
+    ])
+  })
+  it('skips a missing/unreadable root without throwing', () => {
+    const realRoot = join(dir, 'real-root'); mkdirSync(realRoot)
+    mkdirSync(join(realRoot, 'sub'))
+    expect(() =>
+      listProjects({ ccProjectsDir: join(dir, 'nope-cc'), roots: [join(dir, 'nope'), realRoot], recent: [] })
+    ).not.toThrow()
+    const res = listProjects({ ccProjectsDir: join(dir, 'nope-cc'), roots: [join(dir, 'nope'), realRoot], recent: [] })
+    expect(res.map((r) => [r.name, r.source])).toEqual([['sub', 'root']])
+  })
 })
