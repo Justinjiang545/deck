@@ -49,11 +49,15 @@ export function attachArgs(o: TmuxOpts, id: string): string[] {
 }
 
 export function capturePaneArgs(o: TmuxOpts, id: string): string[] {
-  // pane-level target: tmux 3.6a rejects the exact-match "=session" form here
-  // ("can't find pane: =session") even though it works for session-level
-  // commands like kill-session. The bare session name resolves to that
-  // session's active pane, which is what we want (one pane per session).
-  return [...baseArgs(o), 'capture-pane', '-p', '-e', '-J', '-S', '-', '-E', '-1', '-t', sessionName(id)]
+  // pane-level target: plain "=session" (no trailing ":") is rejected by
+  // tmux 3.6a for pane-level commands ("can't find pane: =session"), and a
+  // bare session name is subject to tmux's prefix matching — if the exact
+  // session is gone but another session's name starts with the same
+  // string, the command silently lands in the wrong session instead of
+  // failing. "=session:" (exact session + default window) resolves the
+  // pane unambiguously and fails cleanly ("can't find session: ...") when
+  // the exact session doesn't exist.
+  return [...baseArgs(o), 'capture-pane', '-p', '-e', '-J', '-S', '-', '-E', '-1', '-t', '=' + sessionName(id) + ':']
 }
 
 export function listPanesArgs(o: TmuxOpts): string[] {
@@ -61,8 +65,8 @@ export function listPanesArgs(o: TmuxOpts): string[] {
 }
 
 export function sendKeysArgs(o: TmuxOpts, id: string, text: string): string[] {
-  // see capturePaneArgs: pane-level target, bare session name (no "=").
-  return [...baseArgs(o), 'send-keys', '-t', sessionName(id), text, 'Enter']
+  // see capturePaneArgs: exact session match, no prefix-matching risk.
+  return [...baseArgs(o), 'send-keys', '-t', '=' + sessionName(id) + ':', text, 'Enter']
 }
 
 export interface PaneInfo {
@@ -87,9 +91,8 @@ export function parseListPanes(out: string): PaneInfo[] {
 export function run(bin: string, args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
     execFile(bin, args, { maxBuffer: 64 * 1024 * 1024 }, (err, stdout, stderr) => {
-      const code = err && typeof (err as NodeJS.ErrnoException & { code?: number }).code === 'number'
-        ? ((err as unknown as { code: number }).code)
-        : err ? 1 : 0
+      const c = (err as { code?: unknown } | null)?.code
+      const code = typeof c === 'number' ? c : err ? 1 : 0
       resolve({ code, stdout: String(stdout), stderr: String(stderr) })
     })
   })

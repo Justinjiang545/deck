@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import {
   sessionName, idFromSession, findTmux, baseArgs, newSessionArgs, attachArgs,
-  capturePaneArgs, listPanesArgs, parseListPanes, Tmux
+  capturePaneArgs, listPanesArgs, sendKeysArgs, parseListPanes, Tmux
 } from '../src/main/tmux'
 
 const o = { bin: '/opt/homebrew/bin/tmux', conf: '/x/deck.conf' }
@@ -29,9 +29,14 @@ describe('argv builders', () => {
     expect(attachArgs(o, 'abc').slice(-3)).toEqual(['attach-session', '-t', '=deck-abc'])
   })
   it('capturePaneArgs captures history only, with escapes', () => {
-    // pane-level target uses bare session name, not "=session" — tmux 3.6a
-    // rejects "=session" for pane-level commands (see tmux.ts comment).
-    expect(capturePaneArgs(o, 'abc')).toEqual([...baseArgs(o), 'capture-pane', '-p', '-e', '-J', '-S', '-', '-E', '-1', '-t', 'deck-abc'])
+    // pane-level target uses "=session:" (exact session + default window),
+    // not bare "=session" — tmux 3.6a rejects that for pane-level commands,
+    // and a bare session name (no "=") is subject to prefix matching and
+    // can silently land in the wrong session (see tmux.ts comment).
+    expect(capturePaneArgs(o, 'abc')).toEqual([...baseArgs(o), 'capture-pane', '-p', '-e', '-J', '-S', '-', '-E', '-1', '-t', '=deck-abc:'])
+  })
+  it('sendKeysArgs targets the exact session, not a prefix match', () => {
+    expect(sendKeysArgs(o, 'abc', 'echo hi')).toEqual([...baseArgs(o), 'send-keys', '-t', '=deck-abc:', 'echo hi', 'Enter'])
   })
   it('listPanesArgs uses a tab-separated format', () => {
     const a = listPanesArgs(o)
