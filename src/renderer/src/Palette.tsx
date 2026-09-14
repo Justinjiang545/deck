@@ -45,6 +45,7 @@ export default function Palette({ placeholder, items, onPick, onClose, onDismiss
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => {
+            e.stopPropagation()
             if (e.key === 'Escape') onClose()
             else if (e.key === 'Enter') choose()
             else if (e.key === 'ArrowDown') setIdx((i) => Math.min(i + 1, filtered.length - 1))

@@ -52,7 +52,8 @@ export default function App(): JSX.Element {
     if (e.type !== 'keydown') return true
     if (!e.metaKey || e.ctrlKey || e.altKey) return true
     const k = e.key.toLowerCase()
-    if (k === 't' || k === 'b' || k === 'w') return false
+    if ((k === 't' || k === 'b') && !e.shiftKey) return false
+    if (k === 'w') return false
     return true
   }, [])
 
