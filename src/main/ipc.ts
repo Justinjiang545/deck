@@ -9,20 +9,27 @@ import type { Tmux } from './tmux'
 import type { PtyManager } from './pty'
 import { listProjects } from './projects'
 
-export function registerIpc(deps: { store: Store; tmux: Tmux; ptys: PtyManager; win: () => BrowserWindow | null }): void {
-  const { store, tmux, ptys } = deps
+export function registerIpc(deps: {
+  store: Store
+  tmux: Tmux
+  ptys: PtyManager
+  win: () => BrowserWindow | null
+  send: (channel: string, ...args: unknown[]) => void
+}): void {
+  const { store, tmux, ptys, send } = deps
 
-  store.subscribe((s) => deps.win()?.webContents.send(CH.stateChanged, s))
+  store.subscribe((s) => send(CH.stateChanged, s))
 
   ipcMain.handle(CH.getState, () => store.state)
 
   ipcMain.handle(CH.createTerminal, async (_e, cwd: string | null) => {
-    const dir = cwd && cwd.trim() ? cwd.replace(/^~(?=$|\/)/, homedir()) : homedir()
+    const raw = cwd?.trim()
+    const dir = raw ? raw.replace(/^~(?=$|\/)/, homedir()) : homedir()
     const id = randomUUID()
     await tmux.newSession(id, dir)
     const now = Date.now()
     store.dispatch({ type: 'ADD_TERMINAL', terminal: { id, createdAt: now, cwd: dir, fgCommand: 'zsh', lastActivity: now, cc: null } })
-    if (cwd && cwd.trim()) store.dispatch({ type: 'TOUCH_PROJECT', path: dir })
+    if (raw) store.dispatch({ type: 'TOUCH_PROJECT', path: dir })
     store.dispatch({ type: 'SHOW_TERMINAL', id })
     return id
   })

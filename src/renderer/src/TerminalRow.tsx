@@ -14,11 +14,23 @@ export default function TerminalRow({ terminal, active, onShow, onKill, onRename
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
+  const cancelled = useRef(false)
+  const committed = useRef(false)
 
   useEffect(() => { if (editing) inputRef.current?.select() }, [editing])
 
-  const startEdit = (): void => { setDraft(terminal.customTitle ?? titleOf(terminal)); setEditing(true) }
-  const commit = (): void => { setEditing(false); onRename(draft.trim() || null) }
+  const startEdit = (): void => {
+    setDraft(terminal.customTitle ?? titleOf(terminal))
+    cancelled.current = false
+    committed.current = false
+    setEditing(true)
+  }
+  const commit = (): void => {
+    setEditing(false)
+    if (cancelled.current || committed.current) { cancelled.current = false; committed.current = false; return }
+    committed.current = true
+    onRename(draft.trim() || null)
+  }
 
   return (
     <div
@@ -37,7 +49,7 @@ export default function TerminalRow({ terminal, active, onShow, onKill, onRename
           onBlur={commit}
           onKeyDown={(e) => {
             if (e.key === 'Enter') commit()
-            if (e.key === 'Escape') setEditing(false)
+            if (e.key === 'Escape') { cancelled.current = true; setEditing(false) }
             e.stopPropagation()
           }}
           onClick={(e) => e.stopPropagation()}

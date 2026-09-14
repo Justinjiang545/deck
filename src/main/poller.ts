@@ -37,8 +37,9 @@ export function startPoller(tmux: Tmux, store: Store, intervalMs = 1000): () => 
     if (stopped || running) return
     running = true
     try {
+      const before = store.state
       const panes = await tmux.listPanes()
-      if (stopped) return
+      if (stopped || store.state !== before) return // state moved under us; let the next tick reconcile
       for (const a of reconcile(store.state.terminals, panes, Date.now())) store.dispatch(a)
     } catch {
       /* transient tmux error: skip this tick */

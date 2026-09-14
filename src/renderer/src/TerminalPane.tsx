@@ -34,6 +34,7 @@ export default function TerminalPane({ terminalId, settings, keyFilter }: Props)
       cursorBlink: true,
       allowProposedApi: true,
       macOptionIsMeta: true,
+      scrollOnEraseInDisplay: true,
       theme: THEME
     })
     const fit = new FitAddon()
@@ -49,7 +50,11 @@ export default function TerminalPane({ terminalId, settings, keyFilter }: Props)
     const offExit = window.deck.onPtyExit((id) => { if (id === terminalId) term.write('\r\n\x1b[2m[detached]\x1b[0m\r\n') })
     const onInput = term.onData((d) => { if (attached) window.deck.ptyWrite(terminalId, d) })
 
-    void window.deck.ptyAttach(terminalId, term.cols, term.rows).then(() => { attached = true; term.focus() })
+    void window.deck.ptyAttach(terminalId, term.cols, term.rows).then(() => {
+      attached = true
+      term.focus()
+      window.deck.ptyResize(terminalId, term.cols, term.rows)
+    })
 
     const ro = new ResizeObserver(() => {
       fit.fit()

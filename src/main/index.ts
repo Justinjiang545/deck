@@ -35,9 +35,17 @@ function createWindow(): BrowserWindow {
   } else {
     void w.loadFile(join(__dirname, '../renderer/index.html'))
   }
-  w.on('closed', () => { if (win === w) win = null })
+  w.on('closed', () => { if (win === w) { win = null; ptysRef?.detachAll() } })
   return w
 }
+
+/** Guards every push to the renderer against a destroyed/gone webContents. */
+function send(channel: string, ...args: unknown[]): void {
+  const w = win
+  if (w && !w.isDestroyed()) w.webContents.send(channel, ...args)
+}
+
+let ptysRef: PtyManager | null = null
 
 function confPath(): string {
   // dev: <repo>/resources/deck.conf ; packaged: <app>/resources/deck.conf (see electron-builder extraResources, Phase 5)
@@ -71,11 +79,12 @@ async function boot(): Promise<void> {
   }
 
   const ptys = new PtyManager(tmux, {
-    data: (id, data) => win?.webContents.send(CH.ptyData, id, data),
-    exit: (id) => win?.webContents.send(CH.ptyExit, id)
+    data: (id, data) => send(CH.ptyData, id, data),
+    exit: (id) => send(CH.ptyExit, id)
   })
+  ptysRef = ptys
 
-  registerIpc({ store, tmux, ptys, win: () => win })
+  registerIpc({ store, tmux, ptys, win: () => win, send })
   win = createWindow()
   const stopPoller = startPoller(tmux, store)
 
@@ -89,7 +98,10 @@ async function boot(): Promise<void> {
   })
 }
 
-app.whenReady().then(boot)
+app.whenReady().then(boot).catch((err) => {
+  dialog.showErrorBox('deck failed to start', String(err))
+  app.quit()
+})
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
