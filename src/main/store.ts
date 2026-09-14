@@ -1,4 +1,4 @@
-import type { AppState, Terminal } from '../shared/state'
+import type { AppState, Folder, Terminal } from '../shared/state'
 
 export type Action =
   | { type: 'HYDRATE'; state: AppState }
@@ -10,11 +10,33 @@ export type Action =
   | { type: 'CLOSE_PANE'; id: string }
   | { type: 'SET_SIDEBAR'; open: boolean }
   | { type: 'TOUCH_PROJECT'; path: string }
+  | { type: 'ADD_FOLDER'; folder: Folder }
+  | { type: 'RENAME_FOLDER'; id: string; name: string }
+  | { type: 'DELETE_FOLDER'; id: string }
+  | { type: 'SET_FOLDER_COLLAPSED'; id: string; collapsed: boolean }
+  | { type: 'REORDER_FOLDERS'; ids: string[] }
+  | { type: 'MOVE_TERMINAL'; id: string; folderId: string | null }
+  | { type: 'SELECT_FOLDER'; id: string | null }
+  | { type: 'REORDER_TABS'; ids: string[] }
 
 const MAX_RECENT = 20
 
-function shownId(state: AppState): string | null {
-  return state.layout?.type === 'leaf' ? state.layout.terminalId : null
+function withActive(state: AppState, activeTabId: string | null): AppState {
+  return {
+    ...state,
+    activeTabId,
+    layout: activeTabId ? { type: 'leaf', terminalId: activeTabId } : null,
+    focusedTerminalId: activeTabId
+  }
+}
+
+function closeTab(state: AppState, id: string): AppState {
+  const i = state.openTabs.indexOf(id)
+  if (i === -1) return state
+  const openTabs = state.openTabs.filter((t) => t !== id)
+  let active = state.activeTabId
+  if (active === id) active = openTabs[i] ?? openTabs[i - 1] ?? null
+  return withActive({ ...state, openTabs }, active)
 }
 
 export function reduce(state: AppState, action: Action): AppState {
@@ -29,13 +51,7 @@ export function reduce(state: AppState, action: Action): AppState {
       if (!state.terminals[action.id]) return state
       const terminals = { ...state.terminals }
       delete terminals[action.id]
-      const wasShown = shownId(state) === action.id
-      return {
-        ...state,
-        terminals,
-        layout: wasShown ? null : state.layout,
-        focusedTerminalId: state.focusedTerminalId === action.id ? null : state.focusedTerminalId
-      }
+      return closeTab({ ...state, terminals }, action.id)
     }
 
     case 'UPDATE_TERMINAL': {
@@ -57,13 +73,84 @@ export function reduce(state: AppState, action: Action): AppState {
       return { ...state, terminals: { ...state.terminals, [action.id]: next } }
     }
 
-    case 'SHOW_TERMINAL':
+    case 'SHOW_TERMINAL': {
       if (!state.terminals[action.id]) return state
-      return { ...state, layout: { type: 'leaf', terminalId: action.id }, focusedTerminalId: action.id }
+      const openTabs = state.openTabs.includes(action.id) ? state.openTabs : [...state.openTabs, action.id]
+      return withActive({ ...state, openTabs }, action.id)
+    }
 
     case 'CLOSE_PANE':
-      if (shownId(state) !== action.id) return state
-      return { ...state, layout: null, focusedTerminalId: null }
+      return closeTab(state, action.id)
+
+    case 'ADD_FOLDER':
+      return { ...state, folders: { ...state.folders, [action.folder.id]: action.folder } }
+
+    case 'RENAME_FOLDER': {
+      const f = state.folders[action.id]
+      const name = action.name.trim()
+      if (!f || !name || f.name === name) return state
+      return { ...state, folders: { ...state.folders, [action.id]: { ...f, name } } }
+    }
+
+    case 'DELETE_FOLDER': {
+      if (!state.folders[action.id]) return state
+      const folders = { ...state.folders }
+      delete folders[action.id]
+      const terminals: Record<string, Terminal> = {}
+      for (const [id, t] of Object.entries(state.terminals)) {
+        if (t.folderId === action.id) {
+          const { folderId: _, ...rest } = t
+          terminals[id] = rest
+        } else {
+          terminals[id] = t
+        }
+      }
+      return {
+        ...state,
+        folders,
+        terminals,
+        selectedFolderId: state.selectedFolderId === action.id ? null : state.selectedFolderId
+      }
+    }
+
+    case 'SET_FOLDER_COLLAPSED': {
+      const f = state.folders[action.id]
+      if (!f || f.collapsed === action.collapsed) return state
+      return { ...state, folders: { ...state.folders, [action.id]: { ...f, collapsed: action.collapsed } } }
+    }
+
+    case 'REORDER_FOLDERS': {
+      const folders = { ...state.folders }
+      action.ids.forEach((id, i) => {
+        const f = folders[id]
+        if (f) folders[id] = { ...f, order: i }
+      })
+      return { ...state, folders }
+    }
+
+    case 'MOVE_TERMINAL': {
+      const t = state.terminals[action.id]
+      if (!t) return state
+      if (action.folderId && !state.folders[action.folderId]) return state
+      if ((t.folderId ?? null) === action.folderId) return state
+      const { folderId: _, ...rest } = t
+      const next: Terminal = action.folderId ? { ...rest, folderId: action.folderId } : rest
+      return { ...state, terminals: { ...state.terminals, [action.id]: next } }
+    }
+
+    case 'SELECT_FOLDER':
+      if (action.id && !state.folders[action.id]) return state
+      if (state.selectedFolderId === action.id) return state
+      return { ...state, selectedFolderId: action.id }
+
+    case 'REORDER_TABS': {
+      const same =
+        action.ids.length === state.openTabs.length &&
+        new Set(action.ids).size === action.ids.length &&
+        action.ids.every((id) => state.openTabs.includes(id))
+      if (!same) return state
+      return { ...state, openTabs: action.ids }
+    }
 
     case 'SET_SIDEBAR':
       if (state.sidebarOpen === action.open) return state

@@ -12,7 +12,11 @@ export function loadState(file: string, fallback: AppState): AppState {
       layout: raw.layout ?? null,
       focusedTerminalId: raw.focusedTerminalId ?? null,
       sidebarOpen: raw.sidebarOpen ?? true,
-      settings: { ...fallback.settings, ...(raw.settings ?? {}) }
+      settings: { ...fallback.settings, ...(raw.settings ?? {}) },
+      folders: raw.folders ?? {},
+      openTabs: raw.openTabs ?? [],
+      activeTabId: raw.activeTabId ?? null,
+      selectedFolderId: raw.selectedFolderId ?? null
     }
   } catch {
     try { renameSync(file, file + '.bak') } catch { /* ignore */ }

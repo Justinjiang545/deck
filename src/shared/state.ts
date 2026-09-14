@@ -13,6 +13,14 @@ export interface Terminal {
     lastMessage?: string
     unseen: boolean
   }
+  folderId?: string
+}
+
+export interface Folder {
+  id: string
+  name: string
+  order: number
+  collapsed: boolean
 }
 
 export type Layout =
@@ -36,6 +44,10 @@ export interface AppState {
   focusedTerminalId: string | null
   sidebarOpen: boolean
   settings: Settings
+  folders: Record<string, Folder>
+  openTabs: string[]
+  activeTabId: string | null
+  selectedFolderId: string | null
 }
 
 export function defaultSettings(home: string): Settings {
@@ -55,7 +67,11 @@ export function initialState(home: string): AppState {
     layout: null,
     focusedTerminalId: null,
     sidebarOpen: true,
-    settings: defaultSettings(home)
+    settings: defaultSettings(home),
+    folders: {},
+    openTabs: [],
+    activeTabId: null,
+    selectedFolderId: null
   }
 }
 
@@ -70,4 +86,18 @@ export function titleOf(t: Terminal): string {
 
 export function sortedTerminals(state: AppState): Terminal[] {
   return Object.values(state.terminals).sort((a, b) => a.createdAt - b.createdAt)
+}
+
+export function sortedFolders(state: AppState): Folder[] {
+  return Object.values(state.folders).sort((a, b) => a.order - b.order || a.name.localeCompare(b.name))
+}
+
+export function terminalsInFolder(state: AppState, folderId: string | null): Terminal[] {
+  return sortedTerminals(state).filter((t) => (t.folderId ?? null) === folderId)
+}
+
+export function placementFolder(state: AppState): string | null {
+  const focused = state.focusedTerminalId ? state.terminals[state.focusedTerminalId] : undefined
+  if (focused) return focused.folderId ?? null
+  return state.selectedFolderId
 }

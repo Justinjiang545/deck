@@ -1,5 +1,13 @@
 import { reduce, Store } from '../src/main/store'
-import { initialState, titleOf, sortedTerminals, type Terminal } from '../src/shared/state'
+import {
+  initialState,
+  titleOf,
+  sortedTerminals,
+  sortedFolders,
+  terminalsInFolder,
+  placementFolder,
+  type Terminal
+} from '../src/shared/state'
 
 const HOME = '/Users/test'
 function term(id: string, extra: Partial<Terminal> = {}): Terminal {
@@ -101,6 +109,117 @@ describe('titleOf / sortedTerminals', () => {
     let s = reduce(initialState(HOME), { type: 'ADD_TERMINAL', terminal: term('b', { createdAt: 2 }) })
     s = reduce(s, { type: 'ADD_TERMINAL', terminal: term('a', { createdAt: 1 }) })
     expect(sortedTerminals(s).map((t) => t.id)).toEqual(['a', 'b'])
+  })
+})
+
+describe('folders', () => {
+  const folder = (id: string, order = 0) => ({ id, name: id, order, collapsed: false })
+
+  it('ADD_FOLDER / RENAME_FOLDER / SET_FOLDER_COLLAPSED', () => {
+    let s = reduce(initialState(HOME), { type: 'ADD_FOLDER', folder: folder('f1') })
+    s = reduce(s, { type: 'RENAME_FOLDER', id: 'f1', name: '  Roll ' })
+    s = reduce(s, { type: 'SET_FOLDER_COLLAPSED', id: 'f1', collapsed: true })
+    expect(s.folders['f1']).toEqual({ id: 'f1', name: 'Roll', order: 0, collapsed: true })
+    expect(reduce(s, { type: 'RENAME_FOLDER', id: 'f1', name: '   ' })).toBe(s)
+  })
+
+  it('MOVE_TERMINAL sets/clears folderId and ignores unknown folders', () => {
+    let s = reduce(initialState(HOME), { type: 'ADD_FOLDER', folder: folder('f1') })
+    s = reduce(s, { type: 'ADD_TERMINAL', terminal: term('a') })
+    s = reduce(s, { type: 'MOVE_TERMINAL', id: 'a', folderId: 'f1' })
+    expect(s.terminals['a']?.folderId).toBe('f1')
+    expect(reduce(s, { type: 'MOVE_TERMINAL', id: 'a', folderId: 'nope' })).toBe(s)
+    s = reduce(s, { type: 'MOVE_TERMINAL', id: 'a', folderId: null })
+    expect(s.terminals['a']?.folderId).toBeUndefined()
+  })
+
+  it('DELETE_FOLDER re-files its terminals to Unfiled and clears selection', () => {
+    let s = reduce(initialState(HOME), { type: 'ADD_FOLDER', folder: folder('f1') })
+    s = reduce(s, { type: 'ADD_TERMINAL', terminal: term('a', { folderId: 'f1' }) })
+    s = reduce(s, { type: 'SELECT_FOLDER', id: 'f1' })
+    s = reduce(s, { type: 'DELETE_FOLDER', id: 'f1' })
+    expect(s.folders['f1']).toBeUndefined()
+    expect(s.terminals['a']?.folderId).toBeUndefined()
+    expect(s.selectedFolderId).toBeNull()
+  })
+
+  it('REORDER_FOLDERS assigns order by index; sortedFolders follows it', () => {
+    let s = reduce(initialState(HOME), { type: 'ADD_FOLDER', folder: folder('a', 0) })
+    s = reduce(s, { type: 'ADD_FOLDER', folder: folder('b', 1) })
+    s = reduce(s, { type: 'REORDER_FOLDERS', ids: ['b', 'a'] })
+    expect(sortedFolders(s).map((f) => f.id)).toEqual(['b', 'a'])
+  })
+
+  it('terminalsInFolder and placementFolder', () => {
+    let s = reduce(initialState(HOME), { type: 'ADD_FOLDER', folder: folder('f1') })
+    s = reduce(s, { type: 'ADD_TERMINAL', terminal: term('a', { folderId: 'f1', createdAt: 2 }) })
+    s = reduce(s, { type: 'ADD_TERMINAL', terminal: term('b', { createdAt: 1 }) })
+    expect(terminalsInFolder(s, 'f1').map((t) => t.id)).toEqual(['a'])
+    expect(terminalsInFolder(s, null).map((t) => t.id)).toEqual(['b'])
+    expect(placementFolder(s)).toBeNull()
+    s = reduce(s, { type: 'SELECT_FOLDER', id: 'f1' })
+    expect(placementFolder(s)).toBe('f1')
+    s = reduce(s, { type: 'SHOW_TERMINAL', id: 'b' })   // focused terminal b is Unfiled → wins over selection
+    expect(placementFolder(s)).toBeNull()
+  })
+})
+
+describe('tabs', () => {
+  it('SHOW_TERMINAL opens a tab once and activates it', () => {
+    let s = reduce(initialState(HOME), { type: 'ADD_TERMINAL', terminal: term('a') })
+    s = reduce(s, { type: 'ADD_TERMINAL', terminal: term('b') })
+    s = reduce(s, { type: 'SHOW_TERMINAL', id: 'a' })
+    s = reduce(s, { type: 'SHOW_TERMINAL', id: 'b' })
+    s = reduce(s, { type: 'SHOW_TERMINAL', id: 'a' })
+    expect(s.openTabs).toEqual(['a', 'b'])
+    expect(s.activeTabId).toBe('a')
+    expect(s.layout).toEqual({ type: 'leaf', terminalId: 'a' })
+    expect(s.focusedTerminalId).toBe('a')
+  })
+
+  it('CLOSE_PANE removes the tab and activates the right neighbour, else left', () => {
+    let s = initialState(HOME)
+    for (const id of ['a', 'b', 'c']) s = reduce(s, { type: 'ADD_TERMINAL', terminal: term(id) })
+    for (const id of ['a', 'b', 'c']) s = reduce(s, { type: 'SHOW_TERMINAL', id })
+    s = reduce(s, { type: 'SHOW_TERMINAL', id: 'b' })
+    s = reduce(s, { type: 'CLOSE_PANE', id: 'b' })
+    expect(s.openTabs).toEqual(['a', 'c'])
+    expect(s.activeTabId).toBe('c')
+    s = reduce(s, { type: 'CLOSE_PANE', id: 'c' })
+    expect(s.activeTabId).toBe('a')
+    s = reduce(s, { type: 'CLOSE_PANE', id: 'a' })
+    expect(s.activeTabId).toBeNull()
+    expect(s.layout).toBeNull()
+    expect(s.focusedTerminalId).toBeNull()
+    expect(s.terminals['a']).toBeDefined()
+  })
+
+  it('closing an inactive tab keeps the active one', () => {
+    let s = initialState(HOME)
+    for (const id of ['a', 'b']) s = reduce(s, { type: 'ADD_TERMINAL', terminal: term(id) })
+    for (const id of ['a', 'b']) s = reduce(s, { type: 'SHOW_TERMINAL', id })
+    s = reduce(s, { type: 'CLOSE_PANE', id: 'a' })
+    expect(s.openTabs).toEqual(['b'])
+    expect(s.activeTabId).toBe('b')
+  })
+
+  it('REMOVE_TERMINAL also closes its tab', () => {
+    let s = initialState(HOME)
+    for (const id of ['a', 'b']) s = reduce(s, { type: 'ADD_TERMINAL', terminal: term(id) })
+    for (const id of ['a', 'b']) s = reduce(s, { type: 'SHOW_TERMINAL', id })
+    s = reduce(s, { type: 'REMOVE_TERMINAL', id: 'b' })
+    expect(s.openTabs).toEqual(['a'])
+    expect(s.activeTabId).toBe('a')
+    expect(s.layout).toEqual({ type: 'leaf', terminalId: 'a' })
+  })
+
+  it('REORDER_TABS accepts only a permutation', () => {
+    let s = initialState(HOME)
+    for (const id of ['a', 'b']) s = reduce(s, { type: 'ADD_TERMINAL', terminal: term(id) })
+    for (const id of ['a', 'b']) s = reduce(s, { type: 'SHOW_TERMINAL', id })
+    expect(reduce(s, { type: 'REORDER_TABS', ids: ['b'] })).toBe(s)
+    s = reduce(s, { type: 'REORDER_TABS', ids: ['b', 'a'] })
+    expect(s.openTabs).toEqual(['b', 'a'])
   })
 })
 
