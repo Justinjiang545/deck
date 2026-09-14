@@ -16,7 +16,17 @@ export const CH = {
   ptyWrite: 'pty:write',
   ptyResize: 'pty:resize',
   ptyData: 'pty:data',
-  ptyExit: 'pty:exit'
+  ptyExit: 'pty:exit',
+  createFolder: 'folder:create',
+  renameFolder: 'folder:rename',
+  deleteFolder: 'folder:delete',
+  setFolderCollapsed: 'folder:collapsed',
+  reorderFolders: 'folder:reorder',
+  moveTerminal: 'terminal:move',
+  selectFolder: 'folder:select',
+  reorderTabs: 'tabs:reorder',
+  showRowMenu: 'terminal:menu',
+  renameRequest: 'terminal:renameRequest'
 } as const
 
 export type { ProjectEntry }
@@ -37,6 +47,16 @@ export interface DeckApi {
   ptyResize(id: string, cols: number, rows: number): void
   onPtyData(cb: (id: string, data: string) => void): () => void
   onPtyExit(cb: (id: string) => void): () => void
+  createFolder(name: string): Promise<string>
+  renameFolder(id: string, name: string): Promise<void>
+  deleteFolder(id: string): Promise<void>
+  setFolderCollapsed(id: string, collapsed: boolean): Promise<void>
+  reorderFolders(ids: string[]): Promise<void>
+  moveTerminal(id: string, folderId: string | null): Promise<void>
+  selectFolder(id: string | null): Promise<void>
+  reorderTabs(ids: string[]): Promise<void>
+  showRowMenu(id: string): Promise<void>
+  onRenameRequest(cb: (id: string) => void): () => void
 }
 
 declare global {

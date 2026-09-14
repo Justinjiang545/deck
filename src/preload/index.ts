@@ -23,7 +23,17 @@ const api: DeckApi = {
   ptyWrite: (id, data) => ipcRenderer.send(CH.ptyWrite, id, data),
   ptyResize: (id, cols, rows) => ipcRenderer.send(CH.ptyResize, id, cols, rows),
   onPtyData: (cb) => on<[string, string]>(CH.ptyData, cb),
-  onPtyExit: (cb) => on<[string]>(CH.ptyExit, cb)
+  onPtyExit: (cb) => on<[string]>(CH.ptyExit, cb),
+  createFolder: (name) => ipcRenderer.invoke(CH.createFolder, name),
+  renameFolder: (id, name) => ipcRenderer.invoke(CH.renameFolder, id, name),
+  deleteFolder: (id) => ipcRenderer.invoke(CH.deleteFolder, id),
+  setFolderCollapsed: (id, collapsed) => ipcRenderer.invoke(CH.setFolderCollapsed, id, collapsed),
+  reorderFolders: (ids) => ipcRenderer.invoke(CH.reorderFolders, ids),
+  moveTerminal: (id, folderId) => ipcRenderer.invoke(CH.moveTerminal, id, folderId),
+  selectFolder: (id) => ipcRenderer.invoke(CH.selectFolder, id),
+  reorderTabs: (ids) => ipcRenderer.invoke(CH.reorderTabs, ids),
+  showRowMenu: (id) => ipcRenderer.invoke(CH.showRowMenu, id),
+  onRenameRequest: (cb) => on<[string]>(CH.renameRequest, cb)
 }
 
 contextBridge.exposeInMainWorld('deck', api)
