@@ -10,6 +10,7 @@ import type { ProjectEntry } from '../../shared/ipc'
 export default function App(): JSX.Element {
   const state = useAppState()
   const [picker, setPicker] = useState<ProjectEntry[] | null>(null)
+  const [editingTerminalId, setEditingTerminalId] = useState<string | null>(null)
 
   const openPicker = useCallback(async () => {
     const projects = await window.deck.listProjects()
@@ -67,6 +68,9 @@ export default function App(): JSX.Element {
     return () => window.removeEventListener('keydown', onKey)
   }, [handleKey])
 
+  // Native row context menu's "Rename" asks the matching sidebar row to enter edit mode.
+  useEffect(() => window.deck.onRenameRequest((id) => setEditingTerminalId(id)), [])
+
   // xterm sees keys first; let the app own our shortcuts, pass everything else through.
   const keyFilter = useCallback((e: KeyboardEvent): boolean => {
     if (e.type !== 'keydown') return true
@@ -86,7 +90,14 @@ export default function App(): JSX.Element {
 
   return (
     <div className={'app' + (!state.sidebarOpen ? ' app--nosidebar' : '')}>
-      {state.sidebarOpen && <Sidebar state={state} onNew={() => void openPicker()} />}
+      {state.sidebarOpen && (
+        <Sidebar
+          state={state}
+          onNew={() => void openPicker()}
+          editingTerminalId={editingTerminalId}
+          onTerminalEditDone={() => setEditingTerminalId(null)}
+        />
+      )}
       <main className="main">
         <TabBar state={state} />
         {state.activeTabId ? (

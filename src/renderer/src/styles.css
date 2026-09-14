@@ -41,6 +41,7 @@ body {
   padding: 0 12px 10px 16px;
 }
 .sidebar__brand { font-weight: 600; letter-spacing: 0.02em; color: var(--muted); }
+.sidebar__actions { display: flex; gap: 6px; }
 .btn {
   background: var(--surface-2); color: var(--text); border: 1px solid var(--border);
   border-radius: 6px; padding: 4px 10px; font: inherit; cursor: default;
@@ -49,13 +50,29 @@ body {
 .sidebar__list { flex: 1; overflow-y: auto; padding: 4px 8px; }
 .sidebar__empty { color: var(--muted); padding: 12px 8px; }
 
+/* Folders */
+.folder { margin: 6px 0 2px; }
+.folder__head { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 6px; color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; cursor: default; }
+.folder__head:hover, .folder--selected > .folder__head { background: var(--surface-2); }
+.folder--over > .folder__head { box-shadow: inset 0 0 0 1px var(--accent); }
+.folder__chev { width: 10px; background: none; border: none; color: inherit; font-size: inherit; line-height: 1; padding: 0; cursor: default; transition: transform 150ms ease; }
+.folder--collapsed .folder__chev { transform: rotate(-90deg); }
+.folder__name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.folder__count { font-weight: 400; }
+.folder__x { opacity: 0; background: none; border: none; color: var(--muted); font-size: 13px; cursor: default; }
+.folder__head:hover .folder__x { opacity: 1; }
+.folder__x:hover { color: var(--danger); }
+.folder__input { flex: 1; min-width: 0; background: var(--bg); color: var(--text); border: 1px solid var(--accent); border-radius: 4px; padding: 1px 4px; font: inherit; text-transform: none; outline: none; }
+
 .row {
   display: flex; align-items: center; gap: 8px;
   padding: 6px 8px; border-radius: 6px; cursor: default;
-  transition: background 150ms ease;
+  color: var(--muted);
+  transition: background 150ms ease, color 150ms ease;
 }
 .row:hover { background: var(--surface-2); }
 .row--active { background: var(--surface-2); box-shadow: inset 2px 0 0 var(--accent); }
+.row--open, .row:hover { color: var(--text); }
 .row__dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex: none; }
 .row__dot--claude { background: var(--accent); }
 .row__title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

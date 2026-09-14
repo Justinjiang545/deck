@@ -5,12 +5,24 @@ import { titleOf, type Terminal } from '../../shared/state'
 interface Props {
   terminal: Terminal
   active: boolean
+  open: boolean
+  forceEdit: boolean
+  onEditDone(): void
   onShow(): void
   onKill(): void
   onRename(title: string | null): void
 }
 
-export default function TerminalRow({ terminal, active, onShow, onKill, onRename }: Props): JSX.Element {
+export default function TerminalRow({
+  terminal,
+  active,
+  open,
+  forceEdit,
+  onEditDone,
+  onShow,
+  onKill,
+  onRename
+}: Props): JSX.Element {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
@@ -25,8 +37,13 @@ export default function TerminalRow({ terminal, active, onShow, onKill, onRename
     committed.current = false
     setEditing(true)
   }
+
+  // Right-click "Rename" (native menu) asks this row to enter edit mode.
+  useEffect(() => { if (forceEdit) startEdit() }, [forceEdit])
+
   const commit = (): void => {
     setEditing(false)
+    onEditDone()
     if (cancelled.current || committed.current) { cancelled.current = false; committed.current = false; return }
     committed.current = true
     onRename(draft.trim() || null)
@@ -34,9 +51,12 @@ export default function TerminalRow({ terminal, active, onShow, onKill, onRename
 
   return (
     <div
-      className={'row' + (active ? ' row--active' : '')}
+      className={'row' + (active ? ' row--active' : '') + (open ? ' row--open' : '')}
+      draggable
+      onDragStart={(e) => e.dataTransfer.setData('deck/terminal', terminal.id)}
       onClick={onShow}
       onDoubleClick={(e) => { e.stopPropagation(); startEdit() }}
+      onContextMenu={(e) => { e.preventDefault(); void window.deck.showRowMenu(terminal.id) }}
       title={terminal.cwd}
     >
       <span className={'row__dot' + (terminal.fgCommand === 'claude' ? ' row__dot--claude' : '')} />
