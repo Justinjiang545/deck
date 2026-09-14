@@ -96,14 +96,19 @@ export function reduce(state: AppState, action: Action): AppState {
       if (!state.folders[action.id]) return state
       const folders = { ...state.folders }
       delete folders[action.id]
-      const terminals: Record<string, Terminal> = {}
-      for (const [id, t] of Object.entries(state.terminals)) {
-        if (t.folderId === action.id) {
-          const { folderId: _, ...rest } = t
-          terminals[id] = rest
-        } else {
-          terminals[id] = t
+      const hasTerminals = Object.values(state.terminals).some((t) => t.folderId === action.id)
+      let terminals = state.terminals
+      if (hasTerminals) {
+        const next: Record<string, Terminal> = {}
+        for (const [id, t] of Object.entries(state.terminals)) {
+          if (t.folderId === action.id) {
+            const { folderId: _, ...rest } = t
+            next[id] = rest
+          } else {
+            next[id] = t
+          }
         }
+        terminals = next
       }
       return {
         ...state,
@@ -120,10 +125,11 @@ export function reduce(state: AppState, action: Action): AppState {
     }
 
     case 'REORDER_FOLDERS': {
+      const ids = action.ids.filter((id) => state.folders[id])
+      if (ids.length === 0 || ids.every((id, i) => state.folders[id]!.order === i)) return state
       const folders = { ...state.folders }
-      action.ids.forEach((id, i) => {
-        const f = folders[id]
-        if (f) folders[id] = { ...f, order: i }
+      ids.forEach((id, i) => {
+        folders[id] = { ...folders[id]!, order: i }
       })
       return { ...state, folders }
     }

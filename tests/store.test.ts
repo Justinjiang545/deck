@@ -150,6 +150,21 @@ describe('folders', () => {
     expect(sortedFolders(s).map((f) => f.id)).toEqual(['b', 'a'])
   })
 
+  it('REORDER_FOLDERS is a no-op (identity) when order is unchanged or ids are unknown', () => {
+    let s = reduce(initialState(HOME), { type: 'ADD_FOLDER', folder: folder('a', 0) })
+    s = reduce(s, { type: 'ADD_FOLDER', folder: folder('b', 1) })
+    expect(reduce(s, { type: 'REORDER_FOLDERS', ids: ['a', 'b'] })).toBe(s)
+    expect(reduce(s, { type: 'REORDER_FOLDERS', ids: ['nope'] })).toBe(s)
+  })
+
+  it('DELETE_FOLDER keeps terminals identity when the folder has no terminals', () => {
+    let s = reduce(initialState(HOME), { type: 'ADD_FOLDER', folder: folder('f1') })
+    s = reduce(s, { type: 'ADD_TERMINAL', terminal: term('a') })
+    const before = s.terminals
+    s = reduce(s, { type: 'DELETE_FOLDER', id: 'f1' })
+    expect(s.terminals).toBe(before)
+  })
+
   it('terminalsInFolder and placementFolder', () => {
     let s = reduce(initialState(HOME), { type: 'ADD_FOLDER', folder: folder('f1') })
     s = reduce(s, { type: 'ADD_TERMINAL', terminal: term('a', { folderId: 'f1', createdAt: 2 }) })
