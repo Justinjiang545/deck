@@ -1,15 +1,27 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, dialog } from 'electron'
+import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { is } from '@electron-toolkit/utils'
+import { initialState } from '../shared/state'
+import { Store } from './store'
+import { loadState, createSaver } from './persist'
+import { findTmux, Tmux } from './tmux'
+import { PtyManager } from './pty'
+import { startPoller, reconcile, CREATE_GRACE_MS } from './poller'
+import { registerIpc } from './ipc'
+import { CH } from '../shared/ipc'
+
+let win: BrowserWindow | null = null
 
 function createWindow(): BrowserWindow {
-  const win = new BrowserWindow({
+  const w = new BrowserWindow({
     width: 1280,
     height: 800,
     minWidth: 720,
     minHeight: 400,
     title: 'deck',
     titleBarStyle: 'hiddenInset',
+    trafficLightPosition: { x: 14, y: 14 },
     backgroundColor: '#0e0f11',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -19,19 +31,65 @@ function createWindow(): BrowserWindow {
     }
   })
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    void win.loadURL(process.env['ELECTRON_RENDERER_URL'])
+    void w.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
-    void win.loadFile(join(__dirname, '../renderer/index.html'))
+    void w.loadFile(join(__dirname, '../renderer/index.html'))
   }
-  return win
+  w.on('closed', () => { if (win === w) win = null })
+  return w
 }
 
-app.whenReady().then(() => {
-  createWindow()
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+function confPath(): string {
+  // dev: <repo>/resources/deck.conf ; packaged: <app>/resources/deck.conf (see electron-builder extraResources, Phase 5)
+  return app.isPackaged ? join(process.resourcesPath, 'deck.conf') : join(app.getAppPath(), 'resources', 'deck.conf')
+}
+
+async function boot(): Promise<void> {
+  const bin = findTmux()
+  if (!bin) {
+    await dialog.showMessageBox({ type: 'error', message: 'tmux not found', detail: 'Install it with:  brew install tmux\nThen relaunch deck.' })
+    app.quit()
+    return
+  }
+  const tmux = new Tmux({ bin, conf: confPath() })
+  const stateFile = join(app.getPath('userData'), 'state.json')
+  const store = new Store(loadState(stateFile, initialState(homedir())))
+  const saver = createSaver(stateFile)
+  store.subscribe((s) => saver.schedule(s))
+
+  // Reconcile persisted state with what tmux actually has (adopt orphans, drop dead) before showing UI.
+  // Use now + CREATE_GRACE_MS as the reconcile clock (no grace window at boot), then stamp any
+  // adopted terminal's createdAt/lastActivity back to the real "now" so sort order stays sane.
+  const panes = await tmux.listPanes()
+  const now = Date.now()
+  for (const a of reconcile(store.state.terminals, panes, now + CREATE_GRACE_MS)) {
+    if (a.type === 'ADD_TERMINAL') {
+      a.terminal.createdAt = now
+      a.terminal.lastActivity = now
+    }
+    store.dispatch(a)
+  }
+
+  const ptys = new PtyManager(tmux, {
+    data: (id, data) => win?.webContents.send(CH.ptyData, id, data),
+    exit: (id) => win?.webContents.send(CH.ptyExit, id)
   })
-})
+
+  registerIpc({ store, tmux, ptys, win: () => win })
+  win = createWindow()
+  const stopPoller = startPoller(tmux, store)
+
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) win = createWindow()
+  })
+  app.on('before-quit', () => {
+    stopPoller()
+    ptys.detachAll()
+    saver.flush()
+  })
+}
+
+app.whenReady().then(boot)
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
