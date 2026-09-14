@@ -10,8 +10,16 @@ export default function TabBar({ state }: Props): JSX.Element {
 
   const drop = (targetId: string): void => {
     if (!dragId || dragId === targetId) return
+    const at = state.openTabs.indexOf(targetId)
     const ids = state.openTabs.filter((id) => id !== dragId)
-    ids.splice(ids.indexOf(targetId), 0, dragId)
+    ids.splice(at, 0, dragId)
+    void window.deck.reorderTabs(ids)
+  }
+
+  const dropAtEnd = (): void => {
+    if (!dragId) return
+    const ids = state.openTabs.filter((id) => id !== dragId)
+    ids.push(dragId)
     void window.deck.reorderTabs(ids)
   }
 
@@ -22,12 +30,13 @@ export default function TabBar({ state }: Props): JSX.Element {
           key={t.id}
           className={'tab' + (t.id === state.activeTabId ? ' tab--active' : '')}
           draggable
-          onDragStart={() => setDragId(t.id)}
+          onDragStart={(e) => { setDragId(t.id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('deck/terminal', t.id) }}
           onDragEnd={() => setDragId(null)}
-          onDragOver={(e) => e.preventDefault()}
+          onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }}
           onDrop={() => drop(t.id)}
           onClick={() => void window.deck.showTerminal(t.id)}
           onAuxClick={(e) => { if (e.button === 1) void window.deck.closePane(t.id) }}
+          onContextMenu={(e) => { e.preventDefault(); void window.deck.showRowMenu(t.id) }}
           title={`${titleOf(t)} — ⌘${i + 1}`}
         >
           <span className={'tab__dot' + (t.fgCommand === 'claude' ? ' tab__dot--claude' : '')} />
@@ -35,7 +44,11 @@ export default function TabBar({ state }: Props): JSX.Element {
           <button className="tab__x" title="Close tab (⌘W)" onClick={(e) => { e.stopPropagation(); void window.deck.closePane(t.id) }}>×</button>
         </div>
       ))}
-      <div className="tabbar__spacer" />
+      <div
+        className="tabbar__spacer"
+        onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }}
+        onDrop={dropAtEnd}
+      />
     </div>
   )
 }

@@ -97,7 +97,5 @@ export function terminalsInFolder(state: AppState, folderId: string | null): Ter
 }
 
 export function placementFolder(state: AppState): string | null {
-  const focused = state.focusedTerminalId ? state.terminals[state.focusedTerminalId] : undefined
-  if (focused) return focused.folderId ?? null
   return state.selectedFolderId
 }

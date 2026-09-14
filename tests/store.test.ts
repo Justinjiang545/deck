@@ -165,17 +165,19 @@ describe('folders', () => {
     expect(s.terminals).toBe(before)
   })
 
-  it('terminalsInFolder and placementFolder', () => {
+  it('terminalsInFolder and placementFolder (last click wins)', () => {
     let s = reduce(initialState(HOME), { type: 'ADD_FOLDER', folder: folder('f1') })
     s = reduce(s, { type: 'ADD_TERMINAL', terminal: term('a', { folderId: 'f1', createdAt: 2 }) })
     s = reduce(s, { type: 'ADD_TERMINAL', terminal: term('b', { createdAt: 1 }) })
     expect(terminalsInFolder(s, 'f1').map((t) => t.id)).toEqual(['a'])
     expect(terminalsInFolder(s, null).map((t) => t.id)).toEqual(['b'])
     expect(placementFolder(s)).toBeNull()
-    s = reduce(s, { type: 'SELECT_FOLDER', id: 'f1' })
+    s = reduce(s, { type: 'SHOW_TERMINAL', id: 'a' })   // showing a terminal filed in f1 selects f1
     expect(placementFolder(s)).toBe('f1')
-    s = reduce(s, { type: 'SHOW_TERMINAL', id: 'b' })   // focused terminal b is Unfiled → wins over selection
+    s = reduce(s, { type: 'SHOW_TERMINAL', id: 'b' })   // showing an Unfiled terminal clears the selection
     expect(placementFolder(s)).toBeNull()
+    s = reduce(s, { type: 'SELECT_FOLDER', id: 'f1' })  // clicking a folder header still wins after
+    expect(placementFolder(s)).toBe('f1')
   })
 })
 
@@ -226,6 +228,14 @@ describe('tabs', () => {
     expect(s.openTabs).toEqual(['a'])
     expect(s.activeTabId).toBe('a')
     expect(s.layout).toEqual({ type: 'leaf', terminalId: 'a' })
+  })
+
+  it('SHOW_TERMINAL on the already-active, already-selected tab is an identity no-op', () => {
+    let s = initialState(HOME)
+    s = reduce(s, { type: 'ADD_TERMINAL', terminal: term('a') })
+    s = reduce(s, { type: 'SHOW_TERMINAL', id: 'a' })
+    const same = reduce(s, { type: 'SHOW_TERMINAL', id: 'a' })
+    expect(same).toBe(s)
   })
 
   it('REORDER_TABS accepts only a permutation', () => {

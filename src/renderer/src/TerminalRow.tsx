@@ -52,8 +52,8 @@ export default function TerminalRow({
   return (
     <div
       className={'row' + (active ? ' row--active' : '') + (open ? ' row--open' : '')}
-      draggable
-      onDragStart={(e) => e.dataTransfer.setData('deck/terminal', terminal.id)}
+      draggable={!editing}
+      onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('deck/terminal', terminal.id) }}
       onClick={onShow}
       onDoubleClick={(e) => { e.stopPropagation(); startEdit() }}
       onContextMenu={(e) => { e.preventDefault(); void window.deck.showRowMenu(terminal.id) }}
@@ -69,7 +69,7 @@ export default function TerminalRow({
           onBlur={commit}
           onKeyDown={(e) => {
             if (e.key === 'Enter') commit()
-            if (e.key === 'Escape') { cancelled.current = true; setEditing(false) }
+            if (e.key === 'Escape') { cancelled.current = true; setEditing(false); onEditDone() }
             e.stopPropagation()
           }}
           onClick={(e) => e.stopPropagation()}

@@ -74,9 +74,14 @@ export function reduce(state: AppState, action: Action): AppState {
     }
 
     case 'SHOW_TERMINAL': {
-      if (!state.terminals[action.id]) return state
+      const t = state.terminals[action.id]
+      if (!t) return state
+      const folderId = t.folderId ?? null
+      if (state.activeTabId === action.id && state.openTabs.includes(action.id) && state.selectedFolderId === folderId) {
+        return state
+      }
       const openTabs = state.openTabs.includes(action.id) ? state.openTabs : [...state.openTabs, action.id]
-      return withActive({ ...state, openTabs }, action.id)
+      return withActive({ ...state, openTabs, selectedFolderId: folderId }, action.id)
     }
 
     case 'CLOSE_PANE':

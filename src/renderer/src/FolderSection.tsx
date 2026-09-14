@@ -67,7 +67,7 @@ export default function FolderSection({
     }
   }
 
-  const shown = state.layout?.type === 'leaf' ? state.layout.terminalId : null
+  const shown = state.activeTabId
   const collapsed = folder?.collapsed ?? false
 
   const onDrop = (e: DragEvent<HTMLDivElement>): void => {
@@ -77,11 +77,16 @@ export default function FolderSection({
     if (termId) { void window.deck.moveTerminal(termId, folder?.id ?? null); return }
     const draggedFolderId = e.dataTransfer.getData('deck/folder')
     if (draggedFolderId && folder && draggedFolderId !== folder.id) {
-      const ids = sortedFolders(state).map((f) => f.id).filter((id) => id !== draggedFolderId)
-      ids.splice(ids.indexOf(folder.id), 0, draggedFolderId)
+      const all = sortedFolders(state).map((f) => f.id)
+      const at = all.indexOf(folder.id)
+      const ids = all.filter((id) => id !== draggedFolderId)
+      ids.splice(at, 0, draggedFolderId)
       void window.deck.reorderFolders(ids)
     }
   }
+
+  const acceptsDrag = (e: DragEvent<HTMLDivElement>): boolean =>
+    e.dataTransfer.types.includes('deck/terminal') || (!!folder && e.dataTransfer.types.includes('deck/folder'))
 
   return (
     <div
@@ -91,15 +96,15 @@ export default function FolderSection({
         (selected ? ' folder--selected' : '') +
         (overCount > 0 ? ' folder--over' : '')
       }
-      onDragOver={(e) => e.preventDefault()}
-      onDragEnter={(e) => { e.preventDefault(); setOverCount((n) => n + 1) }}
-      onDragLeave={() => setOverCount((n) => Math.max(0, n - 1))}
+      onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }}
+      onDragEnter={(e) => { e.preventDefault(); if (acceptsDrag(e)) setOverCount((n) => n + 1) }}
+      onDragLeave={(e) => { if (acceptsDrag(e)) setOverCount((n) => Math.max(0, n - 1)) }}
       onDrop={onDrop}
     >
       <div
         className="folder__head"
-        draggable={!!folder}
-        onDragStart={(e) => { if (folder) e.dataTransfer.setData('deck/folder', folder.id) }}
+        draggable={!!folder && !editing}
+        onDragStart={(e) => { if (folder) { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('deck/folder', folder.id) } }}
         onClick={() => void window.deck.selectFolder(folder?.id ?? null)}
         onDoubleClick={(e) => { e.stopPropagation(); startEdit() }}
       >
@@ -120,7 +125,7 @@ export default function FolderSection({
             onBlur={commit}
             onKeyDown={(e) => {
               if (e.key === 'Enter') commit()
-              if (e.key === 'Escape') { cancelled.current = true; setEditing(false) }
+              if (e.key === 'Escape') { cancelled.current = true; setEditing(false); onFolderEditDone() }
               e.stopPropagation()
             }}
             onClick={(e) => e.stopPropagation()}

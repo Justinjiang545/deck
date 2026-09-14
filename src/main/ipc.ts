@@ -94,7 +94,7 @@ export function registerIpc(deps: {
 
   ipcMain.handle(CH.createFolder, (_e, name: string) => {
     const id = randomUUID()
-    const order = Object.keys(store.state.folders).length
+    const order = Math.max(-1, ...Object.values(store.state.folders).map((f) => f.order)) + 1
     store.dispatch({ type: 'ADD_FOLDER', folder: { id, name: name.trim() || 'Folder', order, collapsed: false } })
     store.dispatch({ type: 'SELECT_FOLDER', id })
     return id
@@ -143,7 +143,7 @@ export function registerIpc(deps: {
             checked: t.folderId === f.id,
             click: () => store.dispatch({ type: 'MOVE_TERMINAL', id, folderId: f.id })
           })),
-          { type: 'separator' as const },
+          ...(folders.length > 0 ? [{ type: 'separator' as const }] : []),
           {
             label: 'Unfiled',
             type: 'checkbox' as const,

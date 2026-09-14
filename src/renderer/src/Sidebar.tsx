@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { JSX } from 'react'
 import { sortedFolders, sortedTerminals, terminalsInFolder, type AppState } from '../../shared/state'
 import FolderSection from './FolderSection'
@@ -12,6 +12,22 @@ interface Props {
 
 export default function Sidebar({ state, onNew, editingTerminalId, onTerminalEditDone }: Props): JSX.Element {
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null)
+  const [dragging, setDragging] = useState(false)
+
+  // Track whether an in-app row/folder drag is underway so Unfiled can appear as a drop
+  // target even when it would otherwise be hidden (empty, with folders present).
+  useEffect(() => {
+    const onDragStart = (): void => setDragging(true)
+    const onDragEnd = (): void => setDragging(false)
+    window.addEventListener('dragstart', onDragStart)
+    window.addEventListener('dragend', onDragEnd)
+    window.addEventListener('drop', onDragEnd)
+    return () => {
+      window.removeEventListener('dragstart', onDragStart)
+      window.removeEventListener('dragend', onDragEnd)
+      window.removeEventListener('drop', onDragEnd)
+    }
+  }, [])
 
   const newFolder = (): void => {
     window.deck
@@ -22,6 +38,7 @@ export default function Sidebar({ state, onNew, editingTerminalId, onTerminalEdi
 
   const folders = sortedFolders(state)
   const unfiled = terminalsInFolder(state, null)
+  const totalTerminals = sortedTerminals(state).length
 
   return (
     <aside className="sidebar">
@@ -47,7 +64,7 @@ export default function Sidebar({ state, onNew, editingTerminalId, onTerminalEdi
             onTerminalEditDone={onTerminalEditDone}
           />
         ))}
-        {(unfiled.length > 0 || folders.length === 0) && (
+        {totalTerminals > 0 && (unfiled.length > 0 || folders.length === 0 || dragging) && (
           <FolderSection
             folder={null}
             terminals={unfiled}
@@ -59,7 +76,7 @@ export default function Sidebar({ state, onNew, editingTerminalId, onTerminalEdi
             onTerminalEditDone={onTerminalEditDone}
           />
         )}
-        {sortedTerminals(state).length === 0 && <div className="sidebar__empty">No terminals. ⌘T to create one.</div>}
+        {totalTerminals === 0 && <div className="sidebar__empty">No terminals. ⌘T to create one.</div>}
       </div>
     </aside>
   )

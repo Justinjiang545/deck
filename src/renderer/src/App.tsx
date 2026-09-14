@@ -71,6 +71,18 @@ export default function App(): JSX.Element {
   // Native row context menu's "Rename" asks the matching sidebar row to enter edit mode.
   useEffect(() => window.deck.onRenameRequest((id) => setEditingTerminalId(id)), [])
 
+  // Without this, a Finder file dropped anywhere outside a folder section (the pane, the
+  // tab bar) navigates the window to file://… and replaces the app.
+  useEffect(() => {
+    const prevent = (e: DragEvent): void => e.preventDefault()
+    document.addEventListener('dragover', prevent)
+    document.addEventListener('drop', prevent)
+    return () => {
+      document.removeEventListener('dragover', prevent)
+      document.removeEventListener('drop', prevent)
+    }
+  }, [])
+
   // xterm sees keys first; let the app own our shortcuts, pass everything else through.
   const keyFilter = useCallback((e: KeyboardEvent): boolean => {
     if (e.type !== 'keydown') return true
