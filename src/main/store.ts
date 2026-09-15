@@ -4,7 +4,7 @@ export type Action =
   | { type: 'HYDRATE'; state: AppState }
   | { type: 'ADD_TERMINAL'; terminal: Terminal }
   | { type: 'REMOVE_TERMINAL'; id: string }
-  | { type: 'UPDATE_TERMINAL'; id: string; patch: Partial<Pick<Terminal, 'cwd' | 'fgCommand' | 'lastActivity'>> }
+  | { type: 'UPDATE_TERMINAL'; id: string; patch: Partial<Pick<Terminal, 'cwd' | 'fgCommand' | 'busy' | 'lastActivity'>> }
   | { type: 'RENAME_TERMINAL'; id: string; title: string | null }
   | { type: 'SHOW_TERMINAL'; id: string }
   | { type: 'CLOSE_PANE'; id: string }

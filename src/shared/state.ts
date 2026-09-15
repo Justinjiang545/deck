@@ -6,6 +6,8 @@ export interface Terminal {
   customTitle?: string
   cwd: string
   fgCommand: string
+  /** Something other than the root shell owns the tty foreground (see main/procs.ts). Absent = unknown/false. */
+  busy?: boolean
   lastActivity: number
   cc: null | {
     sessionId?: string
@@ -82,6 +84,7 @@ export type Activity = 'idle' | 'claude' | 'busy'
 
 export function activityOf(t: Terminal): Activity {
   if (t.fgCommand === 'claude') return 'claude'
+  if (t.busy) return 'busy'
   if (!t.fgCommand || SHELLS.has(t.fgCommand)) return 'idle'
   return 'busy'
 }

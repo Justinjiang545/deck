@@ -1,6 +1,7 @@
 import type { PaneInfo, Tmux } from './tmux'
 import type { Action, Store } from './store'
 import type { Terminal } from '../shared/state'
+import { resolveForeground, snapshotProcs, type ProcInfo } from './procs'
 
 export const CREATE_GRACE_MS = 3000
 
@@ -11,12 +12,13 @@ export function reconcile(terminals: Record<string, Terminal>, panes: PaneInfo[]
     seen.add(p.id)
     const t = terminals[p.id]
     if (!t) {
-      actions.push({ type: 'ADD_TERMINAL', terminal: { id: p.id, createdAt: now, cwd: p.cwd, fgCommand: p.fgCommand, lastActivity: now, cc: null } })
+      actions.push({ type: 'ADD_TERMINAL', terminal: { id: p.id, createdAt: now, cwd: p.cwd, fgCommand: p.fgCommand, busy: p.busy ?? false, lastActivity: now, cc: null } })
       continue
     }
-    const patch: { cwd?: string; fgCommand?: string; lastActivity?: number } = {}
+    const patch: { cwd?: string; fgCommand?: string; busy?: boolean; lastActivity?: number } = {}
     if (t.cwd !== p.cwd) patch.cwd = p.cwd
     if (t.fgCommand !== p.fgCommand) patch.fgCommand = p.fgCommand
+    if ((t.busy ?? false) !== (p.busy ?? false)) patch.busy = p.busy ?? false
     if (Object.keys(patch).length) {
       patch.lastActivity = now
       actions.push({ type: 'UPDATE_TERMINAL', id: p.id, patch })
@@ -30,7 +32,12 @@ export function reconcile(terminals: Record<string, Terminal>, panes: PaneInfo[]
   return actions
 }
 
-export function startPoller(tmux: Tmux, store: Store, intervalMs = 1000): () => void {
+/** Overlay the tty-foreground view (procs.ts) on tmux's pane list. */
+export function withForeground(panes: PaneInfo[], procs: ProcInfo[]): PaneInfo[] {
+  return panes.map((p) => ({ ...p, ...resolveForeground(p, procs) }))
+}
+
+export function startPoller(tmux: Tmux, store: Store, intervalMs = 1000, procs: () => Promise<ProcInfo[]> = snapshotProcs): () => void {
   let stopped = false
   let running = false
   const tick = async (): Promise<void> => {
@@ -38,8 +45,9 @@ export function startPoller(tmux: Tmux, store: Store, intervalMs = 1000): () => 
     running = true
     try {
       const before = store.state
-      const panes = await tmux.listPanes()
+      const [rawPanes, procList] = await Promise.all([tmux.listPanes(), procs()])
       if (stopped || store.state !== before) return // state moved under us; let the next tick reconcile
+      const panes = withForeground(rawPanes, procList)
       for (const a of reconcile(store.state.terminals, panes, Date.now())) store.dispatch(a)
     } catch {
       /* transient tmux error: skip this tick */

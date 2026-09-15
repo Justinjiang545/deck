@@ -25,7 +25,7 @@ export function registerIpc(deps: {
   async function killTerminal(id: string): Promise<boolean> {
     const t = store.state.terminals[id]
     if (!t) return true
-    if (!SHELLS.has(t.fgCommand)) {
+    if (t.busy || !SHELLS.has(t.fgCommand)) {
       const w = deps.win()
       const opts = {
         type: 'warning' as const,

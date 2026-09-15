@@ -1,4 +1,4 @@
-import { reconcile, startPoller, CREATE_GRACE_MS } from '../src/main/poller'
+import { reconcile, startPoller, withForeground, CREATE_GRACE_MS } from '../src/main/poller'
 import { Store } from '../src/main/store'
 import { initialState } from '../src/shared/state'
 import type { Terminal } from '../src/shared/state'
@@ -12,7 +12,7 @@ const NOW = 100_000
 describe('reconcile', () => {
   it('adopts unknown panes', () => {
     const acts = reconcile({}, [{ id: 'x', pid: 1, cwd: '/p', fgCommand: 'zsh' }], NOW)
-    expect(acts).toEqual([{ type: 'ADD_TERMINAL', terminal: { id: 'x', createdAt: NOW, cwd: '/p', fgCommand: 'zsh', lastActivity: NOW, cc: null } }])
+    expect(acts).toEqual([{ type: 'ADD_TERMINAL', terminal: { id: 'x', createdAt: NOW, cwd: '/p', fgCommand: 'zsh', busy: false, lastActivity: NOW, cc: null } }])
   })
 
   it('updates changed cwd/fgCommand only', () => {
@@ -46,6 +46,30 @@ function fakeTmux(listPanes: () => Promise<PaneInfo[]>): Tmux {
   return { listPanes } as unknown as Tmux
 }
 
+describe('withForeground', () => {
+  it('overlays busy/fgCommand from the process snapshot and adopts busy into ADD/UPDATE', () => {
+    const procs = [
+      { pid: 10, pgid: 10, tpgid: 20, comm: '-zsh' },
+      { pid: 20, pgid: 20, tpgid: 20, comm: 'bash' },
+      { pid: 21, pgid: 20, tpgid: 20, comm: 'claude' },
+      { pid: 30, pgid: 30, tpgid: 30, comm: '-zsh' }
+    ]
+    const panes = withForeground(
+      [{ id: 'a', pid: 10, cwd: '/a', fgCommand: 'bash' }, { id: 'b', pid: 30, cwd: '/b', fgCommand: 'zsh' }],
+      procs
+    )
+    expect(panes).toEqual([
+      { id: 'a', pid: 10, cwd: '/a', fgCommand: 'claude', busy: true },
+      { id: 'b', pid: 30, cwd: '/b', fgCommand: 'zsh', busy: false }
+    ])
+    const acts = reconcile({ b: term('b', { cwd: '/b' }) }, panes, NOW)
+    expect(acts[0]).toMatchObject({ type: 'ADD_TERMINAL', terminal: { id: 'a', fgCommand: 'claude', busy: true } })
+    expect(acts.length).toBe(1) // b unchanged: busy false == absent
+    const acts2 = reconcile({ b: term('b', { cwd: '/b', busy: true }) }, panes.filter((p) => p.id === 'b'), NOW)
+    expect(acts2).toEqual([{ type: 'UPDATE_TERMINAL', id: 'b', patch: { busy: false, lastActivity: NOW } }])
+  })
+})
+
 describe('startPoller', () => {
   it('does not resurrect a terminal killed while a listPanes() call is in flight', async () => {
     const home = '/home/deck'
@@ -54,7 +78,7 @@ describe('startPoller', () => {
     const d = deferred<PaneInfo[]>()
     const tmux = fakeTmux(() => d.promise)
 
-    const stop = startPoller(tmux, store, 1000)
+    const stop = startPoller(tmux, store, 1000, async () => [])
 
     // Let the poller's initial tick reach and await listPanes() before we mutate the store.
     await Promise.resolve()

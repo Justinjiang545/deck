@@ -74,6 +74,7 @@ export interface PaneInfo {
   pid: number
   cwd: string
   fgCommand: string
+  busy?: boolean
 }
 
 export function parseListPanes(out: string): PaneInfo[] {
