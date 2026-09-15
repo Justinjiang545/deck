@@ -120,10 +120,16 @@ export class Tmux {
     await this.exec(killSessionArgs(this.o, id))
   }
 
+  /**
+   * Panes on the deck server. Resolves [] only when the server is genuinely not running;
+   * any other failure throws so a poll tick is skipped rather than read as "no terminals".
+   */
   async listPanes(): Promise<PaneInfo[]> {
     const r = await run(this.o.bin, listPanesArgs(this.o))
-    // no server running → non-zero exit with "no server running"; treat as empty
-    if (r.code !== 0) return []
+    if (r.code !== 0) {
+      if (/no server running|No such file or directory/.test(r.stderr)) return []
+      throw new Error(`tmux list-panes failed (${r.code}): ${r.stderr.trim()}`)
+    }
     return parseListPanes(r.stdout)
   }
 

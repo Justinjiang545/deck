@@ -74,6 +74,14 @@ describe('findTmux', () => {
 // Integration: real tmux on an isolated socket. Skipped if tmux is missing.
 const bin = findTmux()
 const conf = resolve(__dirname, '../resources/deck.conf')
+describe('Tmux.listPanes error handling', () => {
+  it('treats a missing server as empty but throws on any other failure', async () => {
+    const t = new Tmux({ bin: '/bin/sh', conf: '/nonexistent/deck.conf', socket: 'deck-none' })
+    // /bin/sh with tmux argv exits non-zero without the "no server running" text → must throw, not return []
+    await expect(t.listPanes()).rejects.toThrow(/list-panes failed/)
+  })
+})
+
 describe.skipIf(!bin)('Tmux integration', () => {
   const t = new Tmux({ bin: bin!, conf, socket: 'deck-test' })
   const id = 'itest-' + process.pid

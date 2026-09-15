@@ -12,7 +12,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "postinstall": "electron-builder install-app-deps",
-    "pack": "electron-vite build && electron-builder --mac --dir"
+    "pack": "electron-vite build && electron-builder --mac --dir",
+    "install:app": "bash scripts/install-app.sh"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",

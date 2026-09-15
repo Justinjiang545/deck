@@ -1,4 +1,4 @@
-import { reconcile, startPoller, withForeground, CREATE_GRACE_MS } from '../src/main/poller'
+import { reconcile, startPoller, withForeground, newMemo, CREATE_GRACE_MS, REMOVE_AFTER_MISSES, TOMBSTONE_MS } from '../src/main/poller'
 import { Store } from '../src/main/store'
 import { initialState } from '../src/shared/state'
 import type { Terminal } from '../src/shared/state'
@@ -24,15 +24,40 @@ describe('reconcile', () => {
     expect(reconcile({ x: term('x') }, [{ id: 'x', pid: 1, cwd: '/a', fgCommand: 'zsh' }], NOW)).toEqual([])
   })
 
-  it('removes terminals whose session is gone', () => {
-    expect(reconcile({ x: term('x') }, [], NOW)).toEqual([{ type: 'REMOVE_TERMINAL', id: 'x' }])
+  it('removes terminals whose session is gone (immediate mode, as used at boot)', () => {
+    expect(reconcile({ x: term('x') }, [], NOW, newMemo(), 1)).toEqual([{ type: 'REMOVE_TERMINAL', id: 'x' }])
+  })
+
+  it('removes only after REMOVE_AFTER_MISSES consecutive misses, and a sighting resets the count', () => {
+    const memo = newMemo()
+    for (let i = 1; i < REMOVE_AFTER_MISSES; i++) expect(reconcile({ x: term('x') }, [], NOW, memo)).toEqual([])
+    expect(reconcile({ x: term('x') }, [{ id: 'x', pid: 1, cwd: '/a', fgCommand: 'zsh' }], NOW, memo)).toEqual([])
+    for (let i = 1; i < REMOVE_AFTER_MISSES; i++) expect(reconcile({ x: term('x') }, [], NOW, memo)).toEqual([])
+    expect(reconcile({ x: term('x') }, [], NOW, memo)).toEqual([{ type: 'REMOVE_TERMINAL', id: 'x' }])
+  })
+
+  it('restores title and folder when a removed terminal is re-adopted within TOMBSTONE_MS', () => {
+    const memo = newMemo()
+    const t = term('x', { customTitle: 'api', folderId: 'f1', createdAt: 5 })
+    for (let i = 0; i < REMOVE_AFTER_MISSES; i++) reconcile({ x: t }, [], NOW, memo)
+    const back = reconcile({}, [{ id: 'x', pid: 1, cwd: '/a', fgCommand: 'zsh' }], NOW + 1000, memo)
+    expect(back).toEqual([{ type: 'ADD_TERMINAL', terminal: { id: 'x', createdAt: 5, cwd: '/a', fgCommand: 'zsh', busy: false, lastActivity: NOW + 1000, cc: null, customTitle: 'api', folderId: 'f1' } }])
+    // tombstone consumed: a second adoption is fresh
+    for (let i = 0; i < REMOVE_AFTER_MISSES; i++) reconcile({ x: t }, [], NOW, memo)
+    const late = reconcile({}, [{ id: 'x', pid: 1, cwd: '/a', fgCommand: 'zsh' }], NOW + TOMBSTONE_MS, memo)
+    expect(late[0]).toMatchObject({ type: 'ADD_TERMINAL', terminal: { id: 'x', createdAt: NOW + TOMBSTONE_MS } })
+    expect((late[0] as { terminal: { customTitle?: string } }).terminal.customTitle).toBeUndefined()
+  })
+
+  it('ignores an empty fgCommand from tmux instead of clearing the last known one', () => {
+    expect(reconcile({ x: term('x', { fgCommand: 'vim' }) }, [{ id: 'x', pid: 1, cwd: '/a', fgCommand: '' }], NOW)).toEqual([])
   })
 
   it('keeps just-created terminals during the grace window', () => {
     const fresh = term('x', { createdAt: NOW - CREATE_GRACE_MS + 1 })
     expect(reconcile({ x: fresh }, [], NOW)).toEqual([])
     const old = term('y', { createdAt: NOW - CREATE_GRACE_MS })
-    expect(reconcile({ y: old }, [], NOW)).toEqual([{ type: 'REMOVE_TERMINAL', id: 'y' }])
+    expect(reconcile({ y: old }, [], NOW, newMemo(), 1)).toEqual([{ type: 'REMOVE_TERMINAL', id: 'y' }])
   })
 })
 

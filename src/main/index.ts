@@ -7,7 +7,7 @@ import { Store } from './store'
 import { loadState, createSaver } from './persist'
 import { findTmux, Tmux } from './tmux'
 import { PtyManager } from './pty'
-import { startPoller, reconcile, CREATE_GRACE_MS } from './poller'
+import { startPoller, reconcile, newMemo, CREATE_GRACE_MS } from './poller'
 import { registerIpc } from './ipc'
 import { CH } from '../shared/ipc'
 
@@ -68,14 +68,18 @@ async function boot(): Promise<void> {
   // Reconcile persisted state with what tmux actually has (adopt orphans, drop dead) before showing UI.
   // Use now + CREATE_GRACE_MS as the reconcile clock (no grace window at boot), then stamp any
   // adopted terminal's createdAt/lastActivity back to the real "now" so sort order stays sane.
-  const panes = await tmux.listPanes()
-  const now = Date.now()
-  for (const a of reconcile(store.state.terminals, panes, now + CREATE_GRACE_MS)) {
-    if (a.type === 'ADD_TERMINAL') {
-      a.terminal.createdAt = now
-      a.terminal.lastActivity = now
+  // If tmux can't be read right now, keep the persisted list untouched; the poller reconciles later.
+  let panes: Awaited<ReturnType<typeof tmux.listPanes>> | null = null
+  try { panes = await tmux.listPanes() } catch (err) { console.warn('[boot] tmux unreadable, skipping reconcile:', err) }
+  if (panes) {
+    const now = Date.now()
+    for (const a of reconcile(store.state.terminals, panes, now + CREATE_GRACE_MS, newMemo(), 1)) {
+      if (a.type === 'ADD_TERMINAL') {
+        a.terminal.createdAt = now
+        a.terminal.lastActivity = now
+      }
+      store.dispatch(a)
     }
-    store.dispatch(a)
   }
 
   const ptys = new PtyManager(tmux, {
