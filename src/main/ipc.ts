@@ -1,7 +1,8 @@
-import { BrowserWindow, dialog, ipcMain, Menu } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { CH } from '../shared/ipc'
 import { placementFolder, SHELLS, sortedFolders } from '../shared/state'
 import type { Store } from './store'
@@ -126,6 +127,17 @@ export function registerIpc(deps: {
 
   ipcMain.handle(CH.reorderTabs, (_e, ids: string[]) => {
     store.dispatch({ type: 'REORDER_TABS', ids })
+  })
+
+  // Pasted/dropped images have no path of their own; persist them so a path can be typed into the shell.
+  ipcMain.handle(CH.savePaste, (_e, bytes: Uint8Array, ext: string) => {
+    const safeExt = /^[a-z0-9]{1,5}$/i.test(ext) ? ext.toLowerCase() : 'png'
+    const dir = join(app.getPath('userData'), 'pastes')
+    mkdirSync(dir, { recursive: true })
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').slice(0, 19)
+    const file = join(dir, `paste-${stamp}-${randomUUID().slice(0, 6)}.${safeExt}`)
+    writeFileSync(file, Buffer.from(bytes))
+    return file
   })
 
   ipcMain.handle(CH.showRowMenu, (_e, id: string) => {

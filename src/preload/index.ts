@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { CH, type DeckApi } from '../shared/ipc'
 import type { AppState } from '../shared/state'
 
@@ -33,7 +33,9 @@ const api: DeckApi = {
   selectFolder: (id) => ipcRenderer.invoke(CH.selectFolder, id),
   reorderTabs: (ids) => ipcRenderer.invoke(CH.reorderTabs, ids),
   showRowMenu: (id) => ipcRenderer.invoke(CH.showRowMenu, id),
-  onRenameRequest: (cb) => on<[string]>(CH.renameRequest, cb)
+  onRenameRequest: (cb) => on<[string]>(CH.renameRequest, cb),
+  pathForFile: (file) => { try { return webUtils.getPathForFile(file) } catch { return '' } },
+  savePaste: (bytes, ext) => ipcRenderer.invoke(CH.savePaste, bytes, ext)
 }
 
 contextBridge.exposeInMainWorld('deck', api)

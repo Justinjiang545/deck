@@ -26,7 +26,8 @@ export const CH = {
   selectFolder: 'folder:select',
   reorderTabs: 'tabs:reorder',
   showRowMenu: 'terminal:menu',
-  renameRequest: 'terminal:renameRequest'
+  renameRequest: 'terminal:renameRequest',
+  savePaste: 'files:savePaste'
 } as const
 
 export type { ProjectEntry }
@@ -57,6 +58,10 @@ export interface DeckApi {
   reorderTabs(ids: string[]): Promise<void>
   showRowMenu(id: string): Promise<void>
   onRenameRequest(cb: (id: string) => void): () => void
+  /** Absolute path of a dropped File (Electron webUtils); '' if it has none (e.g. an image dragged from a browser). */
+  pathForFile(file: File): string
+  /** Persist pasted/dropped image bytes under the app's pastes dir; returns the absolute path. */
+  savePaste(bytes: Uint8Array, ext: string): Promise<string>
 }
 
 declare global {
