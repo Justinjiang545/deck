@@ -1,6 +1,7 @@
 import { reduce, Store } from '../src/main/store'
 import {
   initialState,
+  activityOf,
   titleOf,
   sortedTerminals,
   sortedFolders,
@@ -95,6 +96,17 @@ describe('reduce', () => {
   it('HYDRATE replaces state', () => {
     const other = { ...initialState(HOME), sidebarOpen: false }
     expect(reduce(initialState(HOME), { type: 'HYDRATE', state: other })).toBe(other)
+  })
+})
+
+describe('activityOf', () => {
+  it('classifies idle shells, claude, and any other running process', () => {
+    expect(activityOf(term('a'))).toBe('idle')
+    expect(activityOf(term('a', { fgCommand: '-zsh' }))).toBe('idle')
+    expect(activityOf(term('a', { fgCommand: '' }))).toBe('idle')
+    expect(activityOf(term('a', { fgCommand: 'claude' }))).toBe('claude')
+    expect(activityOf(term('a', { fgCommand: 'node' }))).toBe('busy')
+    expect(activityOf(term('a', { fgCommand: 'top' }))).toBe('busy')
   })
 })
 

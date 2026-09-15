@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { JSX } from 'react'
-import { titleOf, type AppState } from '../../shared/state'
+import { activityOf, titleOf, type AppState } from '../../shared/state'
 
 interface Props { state: AppState }
 
@@ -39,7 +39,7 @@ export default function TabBar({ state }: Props): JSX.Element {
           onContextMenu={(e) => { e.preventDefault(); void window.deck.showRowMenu(t.id) }}
           title={`${titleOf(t)} — ⌘${i + 1}`}
         >
-          <span className={'tab__dot' + (t.fgCommand === 'claude' ? ' tab__dot--claude' : '')} />
+          <span className={'tab__dot tab__dot--' + activityOf(t)} />
           <span className="tab__title">{titleOf(t)}</span>
           <button className="tab__x" title="Close tab (⌘W)" onClick={(e) => { e.stopPropagation(); void window.deck.closePane(t.id) }}>×</button>
         </div>

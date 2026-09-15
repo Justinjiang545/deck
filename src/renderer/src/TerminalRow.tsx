@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { JSX } from 'react'
-import { titleOf, type Terminal } from '../../shared/state'
+import { activityOf, titleOf, type Terminal } from '../../shared/state'
 
 interface Props {
   terminal: Terminal
@@ -59,7 +59,7 @@ export default function TerminalRow({
       onContextMenu={(e) => { e.preventDefault(); void window.deck.showRowMenu(terminal.id) }}
       title={terminal.cwd}
     >
-      <span className={'row__dot' + (terminal.fgCommand === 'claude' ? ' row__dot--claude' : '')} />
+      <span className={'row__dot row__dot--' + activityOf(terminal)} title={activityOf(terminal) === 'idle' ? 'idle' : terminal.fgCommand} />
       {editing ? (
         <input
           ref={inputRef}

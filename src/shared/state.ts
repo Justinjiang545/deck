@@ -77,6 +77,15 @@ export function initialState(home: string): AppState {
 
 export const SHELLS = new Set(['zsh', 'bash', 'sh', 'fish', '-zsh', '-bash', 'login'])
 
+/** What the terminal is doing right now, from its foreground process: idle prompt, claude, or any other running command. */
+export type Activity = 'idle' | 'claude' | 'busy'
+
+export function activityOf(t: Terminal): Activity {
+  if (t.fgCommand === 'claude') return 'claude'
+  if (!t.fgCommand || SHELLS.has(t.fgCommand)) return 'idle'
+  return 'busy'
+}
+
 export function titleOf(t: Terminal): string {
   if (t.customTitle) return t.customTitle
   if (t.fgCommand && !SHELLS.has(t.fgCommand)) return t.fgCommand

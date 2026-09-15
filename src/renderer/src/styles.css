@@ -75,6 +75,7 @@ body {
 .row--open, .row:hover { color: var(--text); }
 .row__dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex: none; }
 .row__dot--claude { background: var(--accent); }
+.row__dot--busy { background: var(--needs-you); animation: dot-pulse 1.6s ease-in-out infinite; }
 .row__title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row__sub { color: var(--muted); font-size: 11px; }
 .row__input {
@@ -99,6 +100,9 @@ body {
 .tab--active { background: var(--bg); color: var(--text); box-shadow: inset 0 -2px 0 var(--accent); }
 .tab__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); }
 .tab__dot--claude { background: var(--accent); }
+.tab__dot--busy { background: var(--needs-you); animation: dot-pulse 1.6s ease-in-out infinite; }
+@keyframes dot-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .row__dot--busy, .tab__dot--busy { animation: none; } }
 .tab__title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tab__x { opacity: 0; background: none; border: none; color: var(--muted); font-size: 13px; line-height: 1; padding: 0 2px; }
 .tab:hover .tab__x, .tab--active .tab__x { opacity: 1; }
