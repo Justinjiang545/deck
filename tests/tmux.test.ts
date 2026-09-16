@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import {
+  childEnv, LIST_FORMAT,
   sessionName, idFromSession, findTmux, baseArgs, newSessionArgs, attachArgs,
   capturePaneArgs, listPanesArgs, sendKeysArgs, parseListPanes, Tmux
 } from '../src/main/tmux'
@@ -17,11 +18,11 @@ describe('names', () => {
 
 describe('argv builders', () => {
   it('baseArgs uses private socket and config', () => {
-    expect(baseArgs(o)).toEqual(['-L', 'deck', '-f', '/x/deck.conf'])
+    expect(baseArgs(o)).toEqual(['-u', '-L', 'deck', '-f', '/x/deck.conf'])
   })
   it('newSessionArgs sets cwd and DECK_TERM_ID', () => {
     expect(newSessionArgs(o, 'abc', '/tmp')).toEqual([
-      '-L', 'deck', '-f', '/x/deck.conf',
+      '-u', '-L', 'deck', '-f', '/x/deck.conf',
       'new-session', '-d', '-s', 'deck-abc', '-c', '/tmp', '-e', 'DECK_TERM_ID=abc'
     ])
   })
@@ -42,20 +43,39 @@ describe('argv builders', () => {
     const a = listPanesArgs(o)
     expect(a).toContain('list-panes')
     expect(a).toContain('-a')
-    expect(a[a.length - 1]).toBe('#{session_name}\t#{pane_pid}\t#{pane_current_path}\t#{pane_current_command}')
+    expect(a[a.length - 1]).toBe(LIST_FORMAT)
+    expect(LIST_FORMAT).not.toMatch(/[\x00-\x1f]/) // printable separator only: tmux sanitizes control chars without a UTF-8 locale
   })
 })
 
 describe('parseListPanes', () => {
   it('parses deck sessions and skips others', () => {
-    const out = 'deck-a\t123\t/Users/x\tzsh\nfoo\t1\t/\tbash\ndeck-b\t456\t/tmp\tclaude\n'
+    const out = 'deck-a|123|zsh|/Users/x\nfoo|1|bash|/\ndeck-b|456|claude|/tmp\n'
     expect(parseListPanes(out)).toEqual([
       { id: 'a', pid: 123, cwd: '/Users/x', fgCommand: 'zsh' },
       { id: 'b', pid: 456, cwd: '/tmp', fgCommand: 'claude' }
     ])
   })
+  it('keeps a path that contains the separator', () => {
+    expect(parseListPanes('deck-a|1|zsh|/Users/x/a|b\n')).toEqual([{ id: 'a', pid: 1, cwd: '/Users/x/a|b', fgCommand: 'zsh' }])
+  })
+  it('never turns a sanitized/malformed line into a phantom terminal', () => {
+    // what tmux emits for a tab-separated format without a UTF-8 locale
+    expect(parseListPanes('deck-a_123_/Users/x_zsh\n')).toEqual([])
+    expect(parseListPanes('deck-a|notapid|zsh|/x\n')).toEqual([])
+    expect(parseListPanes('deck-a|123\n')).toEqual([])
+  })
   it('handles empty output', () => {
     expect(parseListPanes('')).toEqual([])
+  })
+})
+
+describe('childEnv', () => {
+  it('adds a UTF-8 LANG when the locale is missing or not UTF-8, and leaves a UTF-8 one alone', () => {
+    expect(childEnv({ PATH: '/bin' })['LANG']).toBe('en_US.UTF-8')
+    expect(childEnv({ LANG: 'C' })['LANG']).toBe('en_US.UTF-8')
+    expect(childEnv({ LANG: 'de_DE.UTF-8' })['LANG']).toBe('de_DE.UTF-8')
+    expect(childEnv({ LC_ALL: 'en_GB.utf8' })['LANG']).toBeUndefined()
   })
 })
 

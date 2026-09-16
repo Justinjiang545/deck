@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process'
 import { SHELLS } from '../shared/state'
+import { childEnv } from './tmux'
 
 /**
  * Foreground detection via the tty's foreground process group.
@@ -33,7 +34,7 @@ export function parsePs(out: string): ProcInfo[] {
 
 export function snapshotProcs(): Promise<ProcInfo[]> {
   return new Promise((resolve) => {
-    execFile('/bin/ps', ['-A', '-o', 'pid=,pgid=,tpgid=,comm='], { maxBuffer: 16 * 1024 * 1024 }, (err, stdout) => {
+    execFile('/bin/ps', ['-A', '-o', 'pid=,pgid=,tpgid=,comm='], { maxBuffer: 16 * 1024 * 1024, env: childEnv() }, (err, stdout) => {
       resolve(err ? [] : parsePs(String(stdout)))
     })
   })

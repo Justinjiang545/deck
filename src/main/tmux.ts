@@ -4,7 +4,13 @@ import { delimiter, join } from 'node:path'
 
 export const SOCKET = 'deck'
 export const SESSION_PREFIX = 'deck-'
-export const LIST_FORMAT = '#{session_name}\t#{pane_pid}\t#{pane_current_path}\t#{pane_current_command}'
+/**
+ * Printable separator: without a UTF-8 locale (Dock/Spotlight launches have no LANG) tmux
+ * rewrites control characters in its output as '_', which silently destroyed tab-separated
+ * lines. The path goes last because it is the only field that may itself contain '|'.
+ */
+export const LIST_SEP = '|'
+export const LIST_FORMAT = ['#{session_name}', '#{pane_pid}', '#{pane_current_command}', '#{pane_current_path}'].join(LIST_SEP)
 
 export function sessionName(id: string): string {
   return SESSION_PREFIX + id
@@ -33,7 +39,8 @@ export interface TmuxOpts {
 }
 
 export function baseArgs(o: TmuxOpts): string[] {
-  return ['-L', o.socket ?? SOCKET, '-f', o.conf]
+  // -u: treat the client as UTF-8 regardless of locale, so output is never sanitized.
+  return ['-u', '-L', o.socket ?? SOCKET, '-f', o.conf]
 }
 
 export function newSessionArgs(o: TmuxOpts, id: string, cwd: string): string[] {
@@ -81,17 +88,29 @@ export function parseListPanes(out: string): PaneInfo[] {
   const panes: PaneInfo[] = []
   for (const line of out.split('\n')) {
     if (!line.trim()) continue
-    const [name = '', pid = '', cwd = '', fgCommand = ''] = line.split('\t')
+    const parts = line.split(LIST_SEP)
+    if (parts.length < 4) continue
+    const [name = '', pidStr = '', fgCommand = ''] = parts
+    const cwd = parts.slice(3).join(LIST_SEP)
     const id = idFromSession(name)
-    if (!id) continue
-    panes.push({ id, pid: Number(pid), cwd, fgCommand })
+    const pid = Number(pidStr)
+    // Refuse anything malformed: a bad line must never become a phantom terminal.
+    if (!id || !/^[A-Za-z0-9_-]+$/.test(id) || !Number.isInteger(pid) || pid <= 0) continue
+    panes.push({ id, pid, cwd, fgCommand })
   }
   return panes
 }
 
+/** Environment for every tmux/ps child: guarantee a UTF-8 locale even when launched from the Dock. */
+export function childEnv(base: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const env = { ...base }
+  if (!/utf-?8/i.test(env['LC_ALL'] ?? env['LC_CTYPE'] ?? env['LANG'] ?? '')) env['LANG'] = 'en_US.UTF-8'
+  return env
+}
+
 export function run(bin: string, args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
-    execFile(bin, args, { maxBuffer: 64 * 1024 * 1024 }, (err, stdout, stderr) => {
+    execFile(bin, args, { maxBuffer: 64 * 1024 * 1024, env: childEnv() }, (err, stdout, stderr) => {
       const c = (err as { code?: unknown } | null)?.code
       const code = typeof c === 'number' ? c : err ? 1 : 0
       resolve({ code, stdout: String(stdout), stderr: String(stderr) })

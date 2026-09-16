@@ -1,6 +1,6 @@
 import * as pty from 'node-pty'
 import { homedir } from 'node:os'
-import { attachArgs, type Tmux } from './tmux'
+import { attachArgs, childEnv, type Tmux } from './tmux'
 
 export interface PtySink {
   data(id: string, data: string): void
@@ -36,7 +36,7 @@ export class PtyManager {
       cols: Math.max(2, cols),
       rows: Math.max(1, rows),
       cwd: homedir(),
-      env: { ...process.env, TERM: 'xterm-256color', LANG: process.env['LANG'] ?? 'en_US.UTF-8' }
+      env: { ...childEnv(), TERM: 'xterm-256color' }
     })
     if (this.gen.get(id) !== g) {
       // Superseded between the capturePane check and spawning: don't keep this proc around.
