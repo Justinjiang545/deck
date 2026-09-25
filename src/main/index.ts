@@ -2,7 +2,7 @@ import { app, BrowserWindow, dialog } from 'electron'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { is } from '@electron-toolkit/utils'
-import { initialState } from '../shared/state'
+import { initialState, unseenCount } from '../shared/state'
 import { Store } from './store'
 import { loadState, createSaver } from './persist'
 import { findTmux, Tmux } from './tmux'
@@ -10,6 +10,9 @@ import { PtyManager } from './pty'
 import { startPoller, reconcile, newMemo, CREATE_GRACE_MS } from './poller'
 import { registerIpc } from './ipc'
 import { CH } from '../shared/ipc'
+import { installHooks, writeHookScript } from './hookInstall'
+import { startHooksServer, type HooksServerHandle } from './hooksServer'
+import { notifyAttention, updateDockBadge } from './notify'
 
 let win: BrowserWindow | null = null
 
@@ -52,6 +55,8 @@ function confPath(): string {
   return app.isPackaged ? join(process.resourcesPath, 'deck.conf') : join(app.getAppPath(), 'resources', 'deck.conf')
 }
 
+let hooksServerRef: HooksServerHandle | null = null
+
 async function boot(): Promise<void> {
   const bin = findTmux()
   if (!bin) {
@@ -59,11 +64,16 @@ async function boot(): Promise<void> {
     app.quit()
     return
   }
-  const tmux = new Tmux({ bin, conf: confPath() })
+  // Own hooks socket per deck instance (a different --user-data-dir, e.g. an isolated test
+  // run, gets its own path and thus its own events). New tmux sessions get this as
+  // DECK_HOOK_SOCK so the hook script only reports when running inside a deck terminal.
+  const hookSockPath = join(app.getPath('userData'), 'hooks.sock')
+  const tmux = new Tmux({ bin, conf: confPath(), hookSock: hookSockPath })
   const stateFile = join(app.getPath('userData'), 'state.json')
   const store = new Store(loadState(stateFile, initialState(homedir())))
   const saver = createSaver(stateFile)
   store.subscribe((s) => saver.schedule(s))
+  store.subscribe((s) => updateDockBadge(unseenCount(s)))
 
   // Reconcile persisted state with what tmux actually has (adopt orphans, drop dead) before showing UI.
   // Use now + CREATE_GRACE_MS as the reconcile clock (no grace window at boot), then stamp any
@@ -92,11 +102,42 @@ async function boot(): Promise<void> {
   win = createWindow()
   const stopPoller = startPoller(tmux, store)
 
+  // Hook install/script write is best-effort and must never block boot: a stale or unwritable
+  // ~/.claude/settings.json just means CC status won't update from hooks (the poller's
+  // fgCommand-based fallback still runs).
+  try {
+    const scriptPath = join(homedir(), '.deck', 'claude-hook.sh')
+    writeHookScript(scriptPath)
+    const result = installHooks(join(homedir(), '.claude', 'settings.json'), scriptPath)
+    if (!result.installed) console.warn('[boot] installHooks skipped:', result.reason)
+  } catch (err) {
+    console.warn('[boot] hook install failed:', err)
+  }
+
+  hooksServerRef = startHooksServer({
+    store,
+    socketPath: hookSockPath,
+    isVisible: (id) => !!win && !win.isDestroyed() && win.isFocused() && store.state.focusedTerminalId === id,
+    onAttention: (id, cc) => {
+      const t = store.state.terminals[id]
+      if (!t) return
+      notifyAttention(t, cc, {
+        sound: store.state.settings.sound,
+        onClick: () => {
+          if (win && !win.isDestroyed()) { win.show(); win.focus() }
+          store.dispatch({ type: 'SHOW_TERMINAL', id })
+        }
+      })
+    },
+    log: (...args) => console.warn(...args)
+  })
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) win = createWindow()
   })
   app.on('before-quit', () => {
     stopPoller()
+    hooksServerRef?.close()
     ptys.detachAll()
     saver.flush()
   })

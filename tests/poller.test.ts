@@ -1,4 +1,4 @@
-import { reconcile, startPoller, withForeground, newMemo, CREATE_GRACE_MS, REMOVE_AFTER_MISSES, TOMBSTONE_MS } from '../src/main/poller'
+import { reconcile, startPoller, withForeground, newMemo, CREATE_GRACE_MS, REMOVE_AFTER_MISSES, TOMBSTONE_MS, CC_CLEAR_AFTER_MISSES } from '../src/main/poller'
 import { Store } from '../src/main/store'
 import { initialState } from '../src/shared/state'
 import type { Terminal } from '../src/shared/state'
@@ -58,6 +58,37 @@ describe('reconcile', () => {
     expect(reconcile({ x: fresh }, [], NOW)).toEqual([])
     const old = term('y', { createdAt: NOW - CREATE_GRACE_MS })
     expect(reconcile({ y: old }, [], NOW, newMemo(), 1)).toEqual([{ type: 'REMOVE_TERMINAL', id: 'y' }])
+  })
+
+  describe('stale cc clearing (hooks-driven cc must not linger if CC exits without a SessionEnd hook)', () => {
+    it('clears cc after CC_CLEAR_AFTER_MISSES consecutive polls where fgCommand is not claude', () => {
+      const memo = newMemo()
+      const withCc = term('x', { fgCommand: 'claude', cc: { status: 'working' as const, unseen: false } })
+      for (let i = 1; i < CC_CLEAR_AFTER_MISSES; i++) {
+        expect(reconcile({ x: withCc }, [{ id: 'x', pid: 1, cwd: '/a', fgCommand: 'zsh' }], NOW, memo)).not.toContainEqual({ type: 'SET_CC', id: 'x', cc: null })
+      }
+      const acts = reconcile({ x: withCc }, [{ id: 'x', pid: 1, cwd: '/a', fgCommand: 'zsh' }], NOW, memo)
+      expect(acts).toContainEqual({ type: 'SET_CC', id: 'x', cc: null })
+    })
+
+    it('a claude sighting resets the miss counter', () => {
+      const memo = newMemo()
+      const withCc = term('x', { fgCommand: 'claude', cc: { status: 'working' as const, unseen: false } })
+      for (let i = 1; i < CC_CLEAR_AFTER_MISSES; i++) reconcile({ x: withCc }, [{ id: 'x', pid: 1, cwd: '/a', fgCommand: 'zsh' }], NOW, memo)
+      reconcile({ x: withCc }, [{ id: 'x', pid: 1, cwd: '/a', fgCommand: 'claude' }], NOW, memo)
+      for (let i = 1; i < CC_CLEAR_AFTER_MISSES; i++) {
+        const acts = reconcile({ x: withCc }, [{ id: 'x', pid: 1, cwd: '/a', fgCommand: 'zsh' }], NOW, memo)
+        expect(acts).not.toContainEqual({ type: 'SET_CC', id: 'x', cc: null })
+      }
+    })
+
+    it('never touches cc for a terminal that has none', () => {
+      const memo = newMemo()
+      const noCc = term('x', { fgCommand: 'zsh' })
+      for (let i = 0; i < CC_CLEAR_AFTER_MISSES + 2; i++) {
+        expect(reconcile({ x: noCc }, [{ id: 'x', pid: 1, cwd: '/a', fgCommand: 'zsh' }], NOW, memo)).toEqual([])
+      }
+    })
   })
 })
 

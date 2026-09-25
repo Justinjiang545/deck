@@ -3,8 +3,9 @@ import { randomUUID } from 'node:crypto'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { mkdirSync, writeFileSync } from 'node:fs'
-import { CH } from '../shared/ipc'
-import { placementFolder, SHELLS, sortedFolders } from '../shared/state'
+import { CH, type DropZone } from '../shared/ipc'
+import { placementFolder, SHELLS, sortedFolders, type ThemeName } from '../shared/state'
+import { countLeaves, leaves, MAX_PANES, type Dir, type PathStep, type Side } from '../shared/layout'
 import type { Store } from './store'
 import type { Tmux } from './tmux'
 import type { PtyManager } from './pty'
@@ -72,8 +73,54 @@ export function registerIpc(deps: {
   })
 
   ipcMain.handle(CH.closePane, async (_e, id: string) => {
-    await ptys.detach(id)
+    // `id` is a tab id, which may now own several panes — detach every terminal it holds, not
+    // just `id` itself (which for a multi-pane tab may not even be a live terminal any more).
+    const layout = store.state.layouts[id]
+    const ids = layout ? leaves(layout) : [id]
+    await Promise.all(ids.map((tid) => ptys.detach(tid)))
     store.dispatch({ type: 'CLOSE_PANE', id })
+  })
+
+  ipcMain.handle(CH.activateTab, (_e, id: string) => {
+    store.dispatch({ type: 'ACTIVATE_TAB', id })
+  })
+
+  ipcMain.handle(CH.splitPane, async (_e, tabId: string, leafId: string, dir: Dir, side: Side = 'after') => {
+    const layout = store.state.layouts[tabId]
+    if (!layout || !leaves(layout).includes(leafId) || countLeaves(layout) >= MAX_PANES) return null
+    const leafTerm = store.state.terminals[leafId]
+    const cwd = leafTerm?.cwd ?? homedir()
+    const id = randomUUID()
+    await tmux.newSession(id, cwd)
+    const now = Date.now()
+    store.dispatch({ type: 'ADD_TERMINAL', terminal: { id, createdAt: now, cwd, fgCommand: 'zsh', lastActivity: now, cc: null } })
+    store.dispatch({ type: 'SPLIT_PANE', tabId, leafId, dir, newTerminalId: id, side })
+    return id
+  })
+
+  ipcMain.handle(CH.closeLeaf, async (_e, tabId: string, terminalId: string) => {
+    await ptys.detach(terminalId)
+    store.dispatch({ type: 'CLOSE_LEAF', tabId, terminalId })
+  })
+
+  ipcMain.on(CH.setRatio, (_e, tabId: string, path: PathStep[], ratio: number) => {
+    store.dispatch({ type: 'SET_RATIO', tabId, path, ratio })
+  })
+
+  ipcMain.handle(CH.movePane, (_e, terminalId: string, toTabId: string, targetLeafId: string, zone: DropZone) => {
+    store.dispatch({ type: 'MOVE_PANE', terminalId, toTabId, targetLeafId, zone })
+  })
+
+  ipcMain.on(CH.focusPane, (_e, tabId: string, terminalId: string) => {
+    store.dispatch({ type: 'FOCUS_PANE', tabId, terminalId })
+  })
+
+  ipcMain.handle(CH.tileTabs, () => {
+    store.dispatch({ type: 'TILE_TABS' })
+  })
+
+  ipcMain.handle(CH.setTheme, (_e, theme: ThemeName) => {
+    store.dispatch({ type: 'SET_THEME', theme })
   })
 
   ipcMain.handle(CH.setSidebar, (_e, open: boolean) => {

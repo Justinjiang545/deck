@@ -1,3 +1,9 @@
+/*
+ * Theme tokens. `graphite` (default) lives on :root; the other three bundled themes override
+ * the same custom properties under :root[data-theme="…"], set by App.tsx from settings.theme.
+ * Everything downstream (chrome + the xterm palette in TerminalPane.tsx) reads these tokens, so
+ * adding a theme here is the only place that needs to change.
+ */
 :root {
   --bg: #0e0f11;
   --surface: #15171a;
@@ -14,6 +20,42 @@
   --sidebar-w: 260px;
   --titlebar-h: 38px;
 }
+:root[data-theme='ember'] {
+  --bg: #151110;
+  --surface: #1c1614;
+  --surface-2: #251d19;
+  --border: #362a24;
+  --text: #e8ddd6;
+  --muted: #96837a;
+  --accent: #e88a5a;
+  --working: #e8a23a;
+  --needs-you: #b8a96a;
+  --danger: #e8685a;
+}
+:root[data-theme='tide'] {
+  --bg: #0a1416;
+  --surface: #101d20;
+  --surface-2: #16262a;
+  --border: #1f3236;
+  --text: #cfe3e3;
+  --muted: #6f9294;
+  --accent: #5abece;
+  --working: #d8c06a;
+  --needs-you: #6fc9a8;
+  --danger: #e87a8f;
+}
+:root[data-theme='paper'] {
+  --bg: #f4efe6;
+  --surface: #ece5d8;
+  --surface-2: #e2d9c8;
+  --border: #d2c4ac;
+  --text: #2b2620;
+  --muted: #7a7365;
+  --accent: #b2703a;
+  --working: #a5791f;
+  --needs-you: #5c7a3a;
+  --danger: #b64a3d;
+}
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; margin: 0; }
 body {
@@ -23,8 +65,12 @@ body {
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
   user-select: none;
+  transition: background 150ms ease, color 150ms ease;
 }
 .app { height: 100%; display: flex; }
+
+/* Keyboard-first: one consistent focus-visible ring everywhere, mouse clicks never show it. */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 
 /* Sidebar */
 .sidebar {
@@ -41,12 +87,21 @@ body {
   padding: 0 12px 10px 16px;
 }
 .sidebar__brand { font-weight: 600; letter-spacing: 0.02em; color: var(--muted); }
-.sidebar__actions { display: flex; gap: 6px; }
+.sidebar__actions { display: flex; gap: 4px; align-items: center; }
+.sidebar__actions .btn { white-space: nowrap; padding: 4px 7px; }
+.sidebar__title { margin-right: 6px; }
 .btn {
   background: var(--surface-2); color: var(--text); border: 1px solid var(--border);
   border-radius: 6px; padding: 4px 10px; font: inherit; cursor: default;
 }
 .btn:hover { border-color: var(--accent); }
+.theme-swatch {
+  width: 22px; height: 22px; flex: none; border-radius: 50%; cursor: default;
+  border: 1px solid var(--border);
+  background: linear-gradient(135deg, var(--accent) 50%, var(--needs-you) 50%);
+  transition: transform 150ms ease, border-color 150ms ease;
+}
+.theme-swatch:hover { border-color: var(--text); transform: scale(1.08); }
 .sidebar__list { flex: 1; overflow-y: auto; padding: 4px 8px; }
 .sidebar__empty { color: var(--muted); padding: 12px 8px; }
 
@@ -59,6 +114,11 @@ body {
 .folder--collapsed .folder__chev { transform: rotate(-90deg); }
 .folder__name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .folder__count { font-weight: 400; }
+.folder__badge {
+  background: var(--needs-you); color: var(--bg); font-size: 10px; font-weight: 700;
+  border-radius: 9px; min-width: 16px; height: 16px; padding: 0 4px; flex: none;
+  display: flex; align-items: center; justify-content: center;
+}
 .folder__x { opacity: 0; background: none; border: none; color: var(--muted); font-size: 13px; cursor: default; }
 .folder__head:hover .folder__x { opacity: 1; }
 .folder__x:hover { color: var(--danger); }
@@ -75,6 +135,21 @@ body {
 .row--open, .row:hover { color: var(--text); }
 .row__dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex: none; }
 .row__dot--busy, .row__dot--claude { background: var(--needs-you); animation: dot-pulse 1.6s ease-in-out infinite; }
+/* Claude Code status (hook-driven; see cc on Terminal), distinct from the fgCommand-derived dot above. */
+.row__dot--cc-working { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); animation: dot-pulse 1.6s ease-in-out infinite; }
+.row__dot--cc-idle { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+.row__dot--cc-done, .row__dot--cc-input {
+  width: 11px; height: 11px; border-radius: 50%; flex: none;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9px; line-height: 1; font-weight: 700;
+}
+.row__dot--cc-done { color: var(--needs-you); background: color-mix(in srgb, var(--needs-you) 18%, transparent); animation: cc-glow-green 1.8s ease-in-out infinite; }
+.row__dot--cc-input { color: var(--working); background: color-mix(in srgb, var(--working) 18%, transparent); animation: cc-glow-amber 1.8s ease-in-out infinite; }
+.row--attn { box-shadow: inset -3px 0 0 var(--needs-you); }
+.row--active.row--attn { box-shadow: inset 2px 0 0 var(--accent), inset -3px 0 0 var(--needs-you); }
+.row--attn .row__title { color: var(--text); font-weight: 600; }
+@keyframes cc-glow-green { 0%, 100% { text-shadow: 0 0 2px var(--needs-you); opacity: 1; } 50% { text-shadow: 0 0 7px var(--needs-you); opacity: 0.8; } }
+@keyframes cc-glow-amber { 0%, 100% { text-shadow: 0 0 2px var(--working); opacity: 1; } 50% { text-shadow: 0 0 7px var(--working); opacity: 0.8; } }
 .row__title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row__sub { color: var(--muted); font-size: 11px; }
 .row__input {
@@ -94,25 +169,197 @@ body {
 /* Tab bar */
 .tabbar { height: var(--titlebar-h); display: flex; align-items: flex-end; padding-left: 8px; gap: 2px; -webkit-app-region: drag; background: var(--surface); border-bottom: 1px solid var(--border); }
 .tabbar__spacer { flex: 1; height: 100%; }
+.tabbar__tile {
+  -webkit-app-region: no-drag;
+  flex: none; align-self: center; margin-right: 8px;
+  width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;
+  background: transparent; border: 1px solid transparent; border-radius: 6px; color: var(--muted); cursor: default;
+  transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+.tabbar__tile:hover { background: var(--surface-2); color: var(--text); border-color: var(--border); }
 .tab { -webkit-app-region: no-drag; display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px 0 10px; border-radius: 6px 6px 0 0; color: var(--muted); max-width: 200px; cursor: default; transition: background 150ms ease, color 150ms ease; }
 .tab:hover { background: var(--surface-2); color: var(--text); }
 .tab--active { background: var(--bg); color: var(--text); box-shadow: inset 0 -2px 0 var(--accent); }
-.tab__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); }
+.tab__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); flex: none; }
 .tab__dot--busy, .tab__dot--claude { background: var(--needs-you); animation: dot-pulse 1.6s ease-in-out infinite; }
+.tab__dot--cc-working { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: dot-pulse 1.6s ease-in-out infinite; }
+.tab__dot--cc-idle { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); }
+.tab__dot--cc-done, .tab__dot--cc-input {
+  width: 10px; height: 10px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-size: 8px; line-height: 1; font-weight: 700;
+}
+.tab__dot--cc-done { color: var(--needs-you); background: color-mix(in srgb, var(--needs-you) 18%, transparent); animation: cc-glow-green 1.8s ease-in-out infinite; }
+.tab__dot--cc-input { color: var(--working); background: color-mix(in srgb, var(--working) 18%, transparent); animation: cc-glow-amber 1.8s ease-in-out infinite; }
+.tab--attn { box-shadow: inset 0 -2px 0 var(--needs-you); }
+.tab--active.tab--attn { box-shadow: inset 0 -2px 0 var(--accent), inset 0 2px 0 var(--needs-you); }
 @keyframes dot-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
-@media (prefers-reduced-motion: reduce) { .row__dot--busy, .row__dot--claude, .tab__dot--busy, .tab__dot--claude { animation: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .row__dot--busy, .row__dot--claude, .tab__dot--busy, .tab__dot--claude,
+  .row__dot--cc-working, .tab__dot--cc-working, .row__dot--cc-done, .tab__dot--cc-done,
+  .row__dot--cc-input, .tab__dot--cc-input { animation: none; }
+}
 .tab__title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tab__count { color: var(--muted); font-size: 11px; flex: none; }
 .tab__x { opacity: 0; background: none; border: none; color: var(--muted); font-size: 13px; line-height: 1; padding: 0 2px; }
 .tab:hover .tab__x, .tab--active .tab__x { opacity: 1; }
 .tab__x:hover { color: var(--danger); }
-.app--nosidebar .tabbar { padding-left: 84px; }
+.app--nosidebar .tabbar { padding-left: 36px; } /* rail is 52px; traffic lights need ~88px total */
 
-.pane { flex: 1; min-height: 0; padding: 8px 0 4px 10px; }
-.pane .xterm { height: 100%; }
+.sidebar__title { display: flex; align-items: center; gap: 4px; margin-left: -6px; }
+.sidebar__collapse, .rail__btn {
+  display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; flex: none;
+  background: none; border: 1px solid transparent; border-radius: 6px; color: var(--muted);
+  font: 16px/1 var(--font-ui); cursor: default; transition: color 150ms ease, background 150ms ease, border-color 150ms ease;
+}
+.sidebar__collapse:hover, .rail__btn:hover { color: var(--text); background: var(--surface-2); border-color: var(--border); }
+
+/* Minimized sidebar */
+.rail {
+  width: 52px; flex: none; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  background: var(--surface); border-right: 1px solid var(--border);
+}
+.rail__drag { height: var(--titlebar-h); width: 100%; flex: none; -webkit-app-region: drag; }
+.rail__list {
+  flex: 1; width: 100%; overflow-y: auto; display: flex; flex-direction: column; align-items: center;
+  gap: 2px; padding: 8px 0; margin-top: 4px; border-top: 1px solid var(--border);
+}
+.rail__item {
+  position: relative; width: 32px; height: 28px; flex: none; display: flex; align-items: center; justify-content: center;
+  background: none; border: none; border-radius: 6px; cursor: default; transition: background 150ms ease;
+}
+.rail__item:hover { background: var(--surface-2); }
+.rail__item--visible { background: color-mix(in srgb, var(--surface-2) 60%, transparent); }
+.rail__item--active { background: var(--surface-2); }
+.rail__item--active::before {
+  content: ''; position: absolute; left: -10px; top: 6px; bottom: 6px; width: 2px; border-radius: 2px; background: var(--accent);
+}
+
+/* Padding lives on .xterm, not .pane: FitAddon subtracts the terminal element's own padding,
+   but under the global border-box rule it reads .pane's height *including* its padding —
+   which sized the terminal a few px taller than the pane and clipped the last row. */
+.pane { flex: 1; min-height: 0; }
+.pane .xterm { height: 100%; padding: 8px 0 4px 10px; }
+/* The viewport spans the padding too; xterm.css paints it #000, which showed as bars. */
+.pane .xterm .xterm-viewport { background-color: transparent !important; }
+/* xterm draws its own scrollbar; the viewport's native one peeked out in the padding strips. */
+.pane .xterm .xterm-viewport { scrollbar-width: none; }
+.pane .xterm .xterm-viewport::-webkit-scrollbar { display: none; }
 .pane--over { box-shadow: inset 0 0 0 2px var(--accent); border-radius: 4px; transition: box-shadow 150ms ease; }
-.empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; color: var(--muted); }
+.empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--muted); }
+.empty__icon { color: var(--muted); opacity: 0.7; margin-bottom: 2px; }
 .empty__title { font-size: 15px; color: var(--text); }
 .empty__hint { font-size: 12px; }
+.empty__cta { margin-top: 6px; }
+
+/* Splits */
+.split { flex: 1; min-height: 0; min-width: 0; display: flex; }
+.split--h { flex-direction: row; }
+.split--v { flex-direction: column; }
+.split__pane { min-width: 0; min-height: 0; display: flex; position: relative; }
+.split__pane > .pane-slot { flex: 1; min-width: 0; min-height: 0; }
+
+/* Discoverable, not just functional: a 9px hit area (well over the 8px floor), a full-line
+   accent highlight (delayed ~80ms so a passing cursor doesn't flash it), a centered grip pill,
+   and — while actually dragging — that pill swaps to a live ratio readout. */
+.divider { flex: none; background: transparent; position: relative; z-index: 1; transition: background 120ms ease; }
+.divider::after { content: ''; position: absolute; background: var(--border); transition: background 120ms ease, width 120ms ease, height 120ms ease; }
+.divider--h { width: 9px; margin: 0 -4px; cursor: ew-resize; }
+.divider--h::after { top: 0; bottom: 0; left: 4px; width: 1px; }
+.divider--v { height: 9px; margin: -4px 0; cursor: ns-resize; }
+.divider--v::after { left: 0; right: 0; top: 4px; height: 1px; }
+.divider:hover, .divider--dragging { background: color-mix(in srgb, var(--accent) 14%, transparent); transition-delay: 80ms; }
+.divider--dragging { transition-delay: 0ms; }
+.divider:hover::after, .divider--dragging::after { background: var(--accent); transition-delay: 80ms; }
+.divider--dragging::after { transition-delay: 0ms; }
+.divider--h:hover::after, .divider--h.divider--dragging::after { width: 2px; }
+.divider--v:hover::after, .divider--v.divider--dragging::after { height: 2px; }
+.divider__grip {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  display: flex; align-items: center; justify-content: center; white-space: nowrap;
+  padding: 2px 5px; border-radius: 4px; background: var(--surface-2); color: var(--muted);
+  font: 10px/1 var(--font-mono); letter-spacing: 0.05em;
+  opacity: 0; pointer-events: none; transition: opacity 120ms ease, color 120ms ease;
+}
+.divider:hover .divider__grip { opacity: 1; color: var(--accent); background: var(--surface); box-shadow: 0 0 0 1px var(--accent); font-size: 12px; padding: 4px 3px; transition-delay: 80ms; }
+.divider--dragging .divider__grip { opacity: 1; color: var(--accent); background: var(--surface); box-shadow: 0 0 0 1px var(--accent); transition-delay: 0ms; }
+
+.pane-slot { position: relative; display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
+.pane-slot > .pane { flex: 1; transition: opacity 120ms ease; }
+.pane-slot--focused { box-shadow: inset 0 0 0 1px var(--accent); border-radius: 4px; }
+/* The moment any tab/row drag starts, every pane gets a faint "you can drop here" outline —
+   obvious before the pointer settles over a specific edge, without waiting for dragover. */
+.pane-slot--drop-target { box-shadow: inset 0 0 0 1px var(--border); border-radius: 4px; transition: box-shadow 120ms ease; }
+/* While a pane drag is live, cover the terminal so drag events hit the pane-slot itself —
+   xterm internals (e.g. the scrollbar along the right edge) otherwise swallow dragover/drop. */
+.pane-slot--drop-cover::after { content: ''; position: absolute; inset: 0; z-index: 5; }
+.pane-slot--drag-over > .pane { opacity: 0.35; }
+/* Claude finished / needs input, unseen: a thin top accent — visible at a glance scanning a
+   9-pane grid — plus the header dot below for per-pane identification. Fades once the pane is
+   focused (unseen clears) or the tab drops to one pane. Layered with the focus ring via a
+   second inset shadow so both can show at once. */
+.pane-slot--cc-done { box-shadow: inset 0 2px 0 var(--needs-you); border-radius: 4px; }
+.pane-slot--cc-input { box-shadow: inset 0 2px 0 var(--working); border-radius: 4px; }
+.pane-slot--focused.pane-slot--cc-done { box-shadow: inset 0 0 0 1px var(--accent), inset 0 2px 0 var(--needs-you); }
+.pane-slot--focused.pane-slot--cc-input { box-shadow: inset 0 0 0 1px var(--accent), inset 0 2px 0 var(--working); }
+
+/* Pane header strip: only rendered once a tab has 2+ panes (SplitView), so a single-pane tab
+   stays chrome-free — the tab bar and sidebar row already carry title + status there. */
+.pane-header {
+  flex: none; height: 22px; display: flex; align-items: center; gap: 6px;
+  padding: 0 8px 0 4px; font-size: 11px; color: var(--muted);
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  cursor: grab; transition: background 150ms ease, color 150ms ease;
+}
+.pane-header:hover { background: var(--surface-2); color: var(--text); }
+.pane-header:active { cursor: grabbing; }
+.pane-header__grip { font-size: 10px; opacity: 0.45; transition: opacity 150ms ease; }
+.pane-header:hover .pane-header__grip { opacity: 0.9; }
+.pane-header__title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pane-header__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); flex: none; }
+.pane-header__dot--cc-working { background: var(--accent); animation: dot-pulse 1.6s ease-in-out infinite; }
+.pane-header__dot--cc-idle { background: var(--muted); }
+.pane-header__dot--cc-done, .pane-header__dot--cc-input {
+  width: 12px; height: 12px; display: flex; align-items: center; justify-content: center;
+  font-size: 9px; line-height: 1; font-weight: 700; border-radius: 50%;
+}
+.pane-header__dot--cc-done { color: var(--needs-you); background: color-mix(in srgb, var(--needs-you) 18%, transparent); animation: cc-glow-green 1.8s ease-in-out infinite; }
+.pane-header__dot--cc-input { color: var(--working); background: color-mix(in srgb, var(--working) 18%, transparent); animation: cc-glow-amber 1.8s ease-in-out infinite; }
+.pane-header__unzoom {
+  flex: none; background: none; border: none; color: var(--muted); font-size: 12px; line-height: 1;
+  padding: 2px; cursor: default; border-radius: 4px; transition: color 150ms ease, background 150ms ease;
+}
+.pane-header__unzoom:hover { color: var(--text); background: var(--surface-2); }
+
+/*
+ * Drag ghost: a single preview rect sized to the ACTUAL resulting pane geometry (half the
+ * pane for a split, the whole pane for a swap) — not the smaller edge band used to detect
+ * the zone (see zoneAt/ghostRect in SplitView.tsx). Reads as "here's what you'll get".
+ */
+.drop-ghost {
+  position: absolute; z-index: 2; pointer-events: none;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 6px; transition: left 90ms ease, top 90ms ease, width 90ms ease, height 90ms ease;
+}
+.drop-ghost--split { background: rgba(122, 162, 247, 0.24); box-shadow: inset 0 0 0 2px var(--accent); margin: 4px; }
+.drop-ghost--swap { background: color-mix(in srgb, var(--needs-you) 16%, transparent); box-shadow: inset 0 0 0 2px var(--needs-you); border-style: dashed; }
+.drop-ghost__label {
+  color: var(--bg); font-size: 11px; font-weight: 600;
+  padding: 3px 8px; border-radius: 4px; letter-spacing: 0.02em;
+}
+.drop-ghost--split .drop-ghost__label { background: var(--accent); }
+.drop-ghost--swap .drop-ghost__label { background: var(--needs-you); }
+@media (prefers-reduced-motion: reduce) {
+  .pane-header__dot--cc-working, .pane-header__dot--cc-done, .pane-header__dot--cc-input { animation: none; }
+}
+
+.cap-hint {
+  position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
+  background: var(--surface-2); border: 1px solid var(--border); color: var(--muted);
+  padding: 5px 10px; border-radius: 6px; font-size: 12px; z-index: 5;
+  animation: cap-hint-fade 1.4s ease forwards;
+}
+@keyframes cap-hint-fade { 0%, 70% { opacity: 1; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .cap-hint { animation: none; } }
 
 /* Palette */
 .palette__backdrop {

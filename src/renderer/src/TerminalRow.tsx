@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { JSX } from 'react'
-import { activityOf, titleOf, type Terminal } from '../../shared/state'
+import { activityOf, ccVisualOf, titleOf, type Terminal } from '../../shared/state'
 
 interface Props {
   terminal: Terminal
@@ -49,9 +49,15 @@ export default function TerminalRow({
     onRename(draft.trim() || null)
   }
 
+  const cc = ccVisualOf(terminal)
+  const unseen = !!terminal.cc?.unseen
+  const dotClass = cc ? 'row__dot row__dot--cc-' + cc : 'row__dot row__dot--' + activityOf(terminal)
+  const dotTitle = cc === 'working' ? 'Claude is working' : cc === 'done' ? 'Claude is done' : cc === 'input' ? 'Claude needs input' : cc === 'idle' ? 'Claude session idle' : activityOf(terminal) === 'idle' ? 'idle' : terminal.fgCommand
+  const glyph = cc === 'done' ? '✓' : cc === 'input' ? '?' : ''
+
   return (
     <div
-      className={'row' + (active ? ' row--active' : '') + (open ? ' row--open' : '')}
+      className={'row' + (active ? ' row--active' : '') + (open ? ' row--open' : '') + (unseen ? ' row--attn' : '')}
       draggable={!editing}
       onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('deck/terminal', terminal.id) }}
       onClick={onShow}
@@ -59,7 +65,7 @@ export default function TerminalRow({
       onContextMenu={(e) => { e.preventDefault(); void window.deck.showRowMenu(terminal.id) }}
       title={terminal.cwd}
     >
-      <span className={'row__dot row__dot--' + activityOf(terminal)} title={activityOf(terminal) === 'idle' ? 'idle' : terminal.fgCommand} />
+      <span className={dotClass} title={dotTitle}>{glyph}</span>
       {editing ? (
         <input
           ref={inputRef}

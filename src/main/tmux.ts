@@ -36,6 +36,12 @@ export interface TmuxOpts {
   bin: string
   conf: string
   socket?: string
+  /**
+   * Path to this deck instance's hooks unix socket. Set as DECK_HOOK_SOCK on every new
+   * session so the Claude Code hook script only reports when running inside a deck terminal,
+   * and each deck instance (including isolated test instances) gets its own events.
+   */
+  hookSock?: string
 }
 
 export function baseArgs(o: TmuxOpts): string[] {
@@ -44,7 +50,9 @@ export function baseArgs(o: TmuxOpts): string[] {
 }
 
 export function newSessionArgs(o: TmuxOpts, id: string, cwd: string): string[] {
-  return [...baseArgs(o), 'new-session', '-d', '-s', sessionName(id), '-c', cwd, '-e', `DECK_TERM_ID=${id}`]
+  const args = [...baseArgs(o), 'new-session', '-d', '-s', sessionName(id), '-c', cwd, '-e', `DECK_TERM_ID=${id}`]
+  if (o.hookSock) args.push('-e', `DECK_HOOK_SOCK=${o.hookSock}`)
+  return args
 }
 
 export function killSessionArgs(o: TmuxOpts, id: string): string[] {

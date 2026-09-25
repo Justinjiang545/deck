@@ -56,6 +56,74 @@ describe('persist', () => {
     expect(s.selectedFolderId).toBeNull()
   })
 
+  it('round-trips a multi-pane layout, including tabFocus', () => {
+    const file = join(dir, 'state.json')
+    const splitLayout = {
+      type: 'split' as const,
+      dir: 'h' as const,
+      ratio: 0.5,
+      a: { type: 'leaf' as const, terminalId: 'a' },
+      b: { type: 'leaf' as const, terminalId: 'b' }
+    }
+    const s = {
+      ...initialState(HOME),
+      terminals: {
+        a: { id: 'a', createdAt: 1, cwd: '/', fgCommand: 'zsh', lastActivity: 1, cc: null },
+        b: { id: 'b', createdAt: 2, cwd: '/', fgCommand: 'zsh', lastActivity: 2, cc: null }
+      },
+      openTabs: ['a'],
+      activeTabId: 'a',
+      layouts: { a: splitLayout },
+      tabFocus: { a: 'b' },
+      layout: splitLayout,
+      focusedTerminalId: 'b'
+    }
+    saveStateNow(file, s)
+    const loaded = loadState(file, initialState(HOME))
+    expect(loaded.layouts).toEqual(s.layouts)
+    expect(loaded.layout).toEqual(s.layouts['a'])
+    expect(loaded.tabFocus).toEqual({ a: 'b' })
+    expect(loaded.focusedTerminalId).toBe('b')
+  })
+
+  it('collapses a split leaf whose terminal no longer exists, on load', () => {
+    const file = join(dir, 'state.json')
+    writeFileSync(file, JSON.stringify({
+      terminals: { a: { id: 'a', createdAt: 1, cwd: '/', fgCommand: 'zsh', lastActivity: 1, cc: null } },
+      folders: {},
+      openTabs: ['a'],
+      activeTabId: 'a',
+      layouts: { a: { type: 'split', dir: 'h', ratio: 0.5, a: { type: 'leaf', terminalId: 'a' }, b: { type: 'leaf', terminalId: 'gone' } } },
+      tabFocus: { a: 'gone' },
+      layout: null,
+      focusedTerminalId: null,
+      sidebarOpen: true,
+      settings: {}
+    }))
+    const s = loadState(file, initialState(HOME))
+    expect(s.layouts['a']).toEqual({ type: 'leaf', terminalId: 'a' })
+    expect(s.layout).toEqual({ type: 'leaf', terminalId: 'a' })
+    expect(s.tabFocus['a']).toBeUndefined()
+    expect(s.focusedTerminalId).toBe('a')
+  })
+
+  it('old single-pane state.json (no layouts field) still loads as a leaf per open tab', () => {
+    const file = join(dir, 'state.json')
+    writeFileSync(file, JSON.stringify({
+      terminals: { a: { id: 'a', createdAt: 1, cwd: '/', fgCommand: 'zsh', lastActivity: 1, cc: null } },
+      folders: {},
+      openTabs: ['a'],
+      activeTabId: 'a',
+      layout: { type: 'leaf', terminalId: 'a' },
+      focusedTerminalId: 'a',
+      sidebarOpen: true,
+      settings: {}
+    }))
+    const s = loadState(file, initialState(HOME))
+    expect(s.layouts['a']).toEqual({ type: 'leaf', terminalId: 'a' })
+    expect(s.openTabs).toEqual(['a'])
+  })
+
   it('saver debounces and flush writes immediately', async () => {
     const file = join(dir, 'state.json')
     const saver = createSaver(file, 50)

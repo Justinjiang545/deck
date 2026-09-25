@@ -1,6 +1,16 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
-import type { AppState, Terminal } from '../shared/state'
+import type { AppState, Layout, Terminal } from '../shared/state'
+import { leaves, removeLeaf } from '../shared/layout'
+
+/** Drop any leaf whose terminal doesn't exist any more, collapsing the tree as it goes. */
+function pruneLayout(layout: Layout, terminals: Record<string, Terminal>): Layout | null {
+  let next: Layout | null = layout
+  for (const id of leaves(layout)) {
+    if (!terminals[id]) next = next && removeLeaf(next, id)
+  }
+  return next
+}
 
 export function loadState(file: string, fallback: AppState): AppState {
   if (!existsSync(file)) return fallback
@@ -17,17 +27,46 @@ export function loadState(file: string, fallback: AppState): AppState {
         terminals[id] = t
       }
     }
-    const openTabs = (raw.openTabs ?? []).filter((id) => terminals[id])
+
+    // A tab id is only meaningful if we still know a layout for it referencing at least one
+    // live terminal — the pre-splits shape (openTabs entries === terminal ids) is a special
+    // case of this where layouts[id] is absent, so synthesize the single-leaf layout it implies.
+    const rawLayouts = (raw.layouts ?? {}) as Record<string, Layout>
+    const openTabs: string[] = []
+    const layouts: Record<string, Layout> = {}
+    for (const id of raw.openTabs ?? []) {
+      const source = rawLayouts[id] ?? (terminals[id] ? ({ type: 'leaf', terminalId: id } as Layout) : null)
+      const pruned = source ? pruneLayout(source, terminals) : null
+      if (pruned) {
+        openTabs.push(id)
+        layouts[id] = pruned
+      }
+    }
+
+    const rawTabFocus = (raw.tabFocus ?? {}) as Record<string, string>
+    const tabFocus: Record<string, string> = {}
+    for (const [tabId, focusId] of Object.entries(rawTabFocus)) {
+      if (layouts[tabId] && leaves(layouts[tabId]).includes(focusId)) tabFocus[tabId] = focusId
+    }
+
     const activeTabId = raw.activeTabId && openTabs.includes(raw.activeTabId) ? raw.activeTabId : null
+    const activeLayout = activeTabId ? (layouts[activeTabId] ?? null) : null
+    const activeLeaves = leaves(activeLayout)
+    const rememberedFocus = activeTabId ? tabFocus[activeTabId] : undefined
+    const focusedTerminalId = activeTabId
+      ? ((rememberedFocus && activeLeaves.includes(rememberedFocus) ? rememberedFocus : activeLeaves[0]) ?? null)
+      : null
 
     return {
       terminals,
       folders: raw.folders ?? {},
       openTabs,
       activeTabId,
+      layouts,
+      tabFocus,
       selectedFolderId: raw.selectedFolderId && (raw.folders ?? {})[raw.selectedFolderId] ? raw.selectedFolderId : null,
-      layout: activeTabId ? { type: 'leaf', terminalId: activeTabId } : null,
-      focusedTerminalId: activeTabId,
+      layout: activeLayout,
+      focusedTerminalId,
       sidebarOpen: raw.sidebarOpen ?? true,
       settings: { ...fallback.settings, ...(raw.settings ?? {}) }
     }

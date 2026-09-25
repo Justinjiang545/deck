@@ -1,4 +1,5 @@
 import { reduce, Store } from '../src/main/store'
+import { leaves as leavesOf } from '../src/shared/layout'
 import {
   initialState,
   activityOf,
@@ -257,6 +258,256 @@ describe('tabs', () => {
     expect(reduce(s, { type: 'REORDER_TABS', ids: ['b'] })).toBe(s)
     s = reduce(s, { type: 'REORDER_TABS', ids: ['b', 'a'] })
     expect(s.openTabs).toEqual(['b', 'a'])
+  })
+})
+
+describe('close rebalancing', () => {
+  const ratiosOf = (l: import('../src/shared/state').Layout | undefined): number[] =>
+    !l || l.type === 'leaf' ? [] : [l.ratio, ...ratiosOf(l.a), ...ratiosOf(l.b)]
+  const widths = (l: import('../src/shared/state').Layout, share = 1): Record<string, number> =>
+    l.type === 'leaf' ? { [l.terminalId]: share } : { ...widths(l.a, share * l.ratio), ...widths(l.b, share * (1 - l.ratio)) }
+
+  it('closing a pane in an even row re-evens the remaining panes', () => {
+    let s = initialState(HOME)
+    for (const id of ['a', 'b', 'c', 'd']) s = reduce(s, { type: 'ADD_TERMINAL', terminal: term(id) })
+    s = reduce(s, { type: 'SHOW_TERMINAL', id: 'a' })
+    s = reduce(s, { type: 'SPLIT_PANE', tabId: 'a', leafId: 'a', dir: 'h', newTerminalId: 'b' })
+    s = reduce(s, { type: 'SPLIT_PANE', tabId: 'a', leafId: 'b', dir: 'h', newTerminalId: 'c' })
+    s = reduce(s, { type: 'SPLIT_PANE', tabId: 'a', leafId: 'c', dir: 'h', newTerminalId: 'd' })
+    for (const closing of ['b', 'd']) {
+      s = reduce(s, { type: 'CLOSE_LEAF', tabId: 'a', terminalId: closing })
+      const w = Object.values(widths(s.layouts['a']!))
+      for (const x of w) expect(x).toBeCloseTo(1 / w.length, 5)
+    }
+    expect(ratiosOf(s.layouts['a'])).toEqual([0.5])
+  })
+})
+
+describe('splits', () => {
+  const open = (s: import('../src/shared/state').AppState, ids: string[]) =>
+    ids.reduce((acc, id) => reduce(acc, { type: 'SHOW_TERMINAL', id }), s)
+
+  const withThree = () => {
+    let s = initialState(HOME)
+    for (const id of ['a', 'b', 'c']) s = reduce(s, { type: 'ADD_TERMINAL', terminal: term(id) })
+    return open(s, ['a']) // tab 'a' active, single pane
+  }
+
+  it('SPLIT_PANE splits the target leaf and focuses the new pane', () => {
+    let s = withThree()
+    s = reduce(s, { type: 'SPLIT_PANE', tabId: 'a', leafId: 'a', dir: 'h', newTerminalId: 'b' })
+    expect(s.layout).toEqual({ type: 'split', dir: 'h', ratio: 0.5, a: { type: 'leaf', terminalId: 'a' }, b: { type: 'leaf', terminalId: 'b' } })
+    expect(s.focusedTerminalId).toBe('b')
+    expect(s.openTabs).toEqual(['a']) // still one tab
+  })
+
+  it('SPLIT_PANE no-ops if the new terminal does not exist, or the leaf is not in that tab', () => {
+    const s = withThree()
+    expect(reduce(s, { type: 'SPLIT_PANE', tabId: 'a', leafId: 'a', dir: 'h', newTerminalId: 'ghost' })).toBe(s)
+    expect(reduce(s, { type: 'SPLIT_PANE', tabId: 'a', leafId: 'nope', dir: 'h', newTerminalId: 'b' })).toBe(s)
+  })
+
+  it('CLOSE_LEAF removes one pane and keeps the tab open with the rest', () => {
+    let s = withThree()
+    s = reduce(s, { type: 'SPLIT_PANE', tabId: 'a', leafId: 'a', dir: 'h', newTerminalId: 'b' })
+    s = reduce(s, { type: 'CLOSE_LEAF', tabId: 'a', terminalId: 'b' })
+    expect(s.layout).toEqual({ type: 'leaf', terminalId: 'a' })
+    expect(s.openTabs).toEqual(['a'])
+    expect(s.focusedTerminalId).toBe('a')
+  })
+
+  it('CLOSE_LEAF on the last pane closes the whole tab', () => {
+    let s = withThree()
+    s = reduce(s, { type: 'CLOSE_LEAF', tabId: 'a', terminalId: 'a' })
+    expect(s.openTabs).toEqual([])
+    expect(s.activeTabId).toBeNull()
+    expect(s.layout).toBeNull()
+    expect(s.terminals['a']).toBeDefined() // detach only, terminal survives
+  })
+
+  it('SET_RATIO clamps and updates the addressed split node', () => {
+    let s = withThree()
+    s = reduce(s, { type: 'SPLIT_PANE', tabId: 'a', leafId: 'a', dir: 'h', newTerminalId: 'b' })
+    s = reduce(s, { type: 'SET_RATIO', tabId: 'a', path: [], ratio: 2 })
+    expect((s.layout as { ratio: number }).ratio).toBe(0.88)
+  })
+
+  it('MOVE_PANE splits into the target zone and removes the pane from its old tab', () => {
+    let s = withThree()
+    s = open(s, ['b']) // tab 'b' active now, 'a' and 'b' both open as separate tabs
+    s = reduce(s, { type: 'MOVE_PANE', terminalId: 'a', toTabId: 'b', targetLeafId: 'b', zone: 'right' })
+    expect(s.openTabs).toEqual(['b']) // tab 'a' closed (its only pane moved out)
+    expect(s.layouts['b']).toEqual({
+      type: 'split',
+      dir: 'h',
+      ratio: 0.5,
+      a: { type: 'leaf', terminalId: 'b' },
+      b: { type: 'leaf', terminalId: 'a' }
+    })
+    expect(s.focusedTerminalId).toBe('a')
+  })
+
+  it('MOVE_PANE "center" zone is a true swap: X\'s own single-pane tab is handed to the displaced terminal', () => {
+    let s = withThree()
+    s = open(s, ['b'])
+    s = reduce(s, { type: 'MOVE_PANE', terminalId: 'a', toTabId: 'b', targetLeafId: 'b', zone: 'center' })
+    expect(s.layouts['b']).toEqual({ type: 'leaf', terminalId: 'a' })
+    expect(s.layouts['a']).toEqual({ type: 'leaf', terminalId: 'b' }) // b took a's old tab, which stays open
+    expect(s.openTabs).toEqual(['a', 'b'])
+    expect(s.activeTabId).toBe('b')
+    expect(s.focusedTerminalId).toBe('a')
+  })
+
+  it('MOVE_PANE "center" zone swaps two leaves within the same tab, in place', () => {
+    let s = withThree()
+    s = reduce(s, { type: 'SPLIT_PANE', tabId: 'a', leafId: 'a', dir: 'h', newTerminalId: 'b' })
+    s = reduce(s, { type: 'MOVE_PANE', terminalId: 'a', toTabId: 'a', targetLeafId: 'b', zone: 'center' })
+    expect(s.layouts['a']).toEqual({ type: 'split', dir: 'h', ratio: 0.5, a: { type: 'leaf', terminalId: 'b' }, b: { type: 'leaf', terminalId: 'a' } })
+    expect(s.openTabs).toEqual(['a'])
+    expect(s.focusedTerminalId).toBe('a')
+  })
+
+  it('MOVE_PANE "center" zone swaps into/out of a multi-pane source tab, at X\'s old spot', () => {
+    let s = withThree()
+    s = reduce(s, { type: 'SPLIT_PANE', tabId: 'a', leafId: 'a', dir: 'h', newTerminalId: 'b' }) // tab a: [a, b]
+    s = open(s, ['c']) // tab c: [c], now active
+    s = reduce(s, { type: 'MOVE_PANE', terminalId: 'a', toTabId: 'c', targetLeafId: 'c', zone: 'center' })
+    // c takes a's old spot inside tab a's tree; a takes c's spot in tab c
+    expect(s.layouts['a']).toEqual({ type: 'split', dir: 'h', ratio: 0.5, a: { type: 'leaf', terminalId: 'c' }, b: { type: 'leaf', terminalId: 'b' } })
+    expect(s.layouts['c']).toEqual({ type: 'leaf', terminalId: 'a' })
+    expect(s.openTabs).toEqual(['a', 'c'])
+  })
+
+  it('MOVE_PANE rearranges within the same tab without tripping the pane cap', () => {
+    let s = withThree()
+    s = reduce(s, { type: 'SPLIT_PANE', tabId: 'a', leafId: 'a', dir: 'h', newTerminalId: 'b' })
+    s = reduce(s, { type: 'SPLIT_PANE', tabId: 'a', leafId: 'b', dir: 'v', newTerminalId: 'c' })
+    s = reduce(s, { type: 'MOVE_PANE', terminalId: 'a', toTabId: 'a', targetLeafId: 'c', zone: 'left' })
+    expect(leavesOf(s.layouts['a']!)).toEqual(expect.arrayContaining(['a', 'b', 'c']))
+    expect(leavesOf(s.layouts['a']!).length).toBe(3)
+  })
+
+  it('MOVE_PANE refuses past the 9-pane cap on the target tab', () => {
+    let s = initialState(HOME)
+    for (let i = 0; i < 10; i++) s = reduce(s, { type: 'ADD_TERMINAL', terminal: term(`t${i}`) })
+    s = open(s, ['t0'])
+    for (let i = 1; i < 9; i++) s = reduce(s, { type: 'SPLIT_PANE', tabId: 't0', leafId: `t${i - 1}`, dir: 'h', newTerminalId: `t${i}` })
+    expect(leavesOf(s.layouts['t0']!).length).toBe(9)
+    s = open(s, ['t9']) // separate tab
+    const before = s
+    s = reduce(s, { type: 'MOVE_PANE', terminalId: 't9', toTabId: 't0', targetLeafId: 't0', zone: 'right' })
+    expect(s).toBe(before) // rejected, unchanged
+  })
+
+  it('REMOVE_TERMINAL collapses the leaf out of whichever tab currently holds it', () => {
+    let s = withThree()
+    s = open(s, ['b'])
+    s = reduce(s, { type: 'MOVE_PANE', terminalId: 'a', toTabId: 'b', targetLeafId: 'b', zone: 'right' })
+    s = reduce(s, { type: 'REMOVE_TERMINAL', id: 'a' })
+    expect(s.layouts['b']).toEqual({ type: 'leaf', terminalId: 'b' })
+    expect(s.terminals['a']).toBeUndefined()
+  })
+
+  it('ACTIVATE_TAB switches tabs and restores remembered focus', () => {
+    let s = withThree()
+    s = reduce(s, { type: 'SPLIT_PANE', tabId: 'a', leafId: 'a', dir: 'h', newTerminalId: 'b' })
+    s = open(s, ['c']) // opens tab 'c', 'a' tab goes to background with focus 'b'
+    expect(s.activeTabId).toBe('c')
+    s = reduce(s, { type: 'ACTIVATE_TAB', id: 'a' })
+    expect(s.activeTabId).toBe('a')
+    expect(s.focusedTerminalId).toBe('b') // remembered, not reset to the tab's anchor 'a'
+    expect(reduce(s, { type: 'ACTIVATE_TAB', id: 'nope' })).toBe(s)
+  })
+
+  it('TILE_TABS gathers every open tab into the active tab as a balanced grid', () => {
+    let s = initialState(HOME)
+    for (const id of ['a', 'b', 'c', 'd']) s = reduce(s, { type: 'ADD_TERMINAL', terminal: term(id) })
+    s = open(s, ['a', 'b', 'c', 'd']) // 4 separate single-pane tabs, 'd' active
+    s = reduce(s, { type: 'ACTIVATE_TAB', id: 'a' }) // tile into 'a'
+    s = reduce(s, { type: 'TILE_TABS' })
+    expect(s.openTabs).toEqual(['a']) // b, c, d absorbed, their tabs closed
+    expect(leavesOf(s.layouts['a']!)).toEqual(['a', 'b', 'c', 'd'])
+    expect(s.activeTabId).toBe('a')
+    expect(s.focusedTerminalId).toBe('a')
+  })
+
+  it('TILE_TABS leaves tabs beyond MAX_PANES untouched', () => {
+    let s = initialState(HOME)
+    const ids = Array.from({ length: 11 }, (_, i) => `t${i}`)
+    for (const id of ids) s = reduce(s, { type: 'ADD_TERMINAL', terminal: term(id) })
+    s = open(s, ids)
+    s = reduce(s, { type: 'ACTIVATE_TAB', id: 't0' })
+    s = reduce(s, { type: 'TILE_TABS' })
+    expect(leavesOf(s.layouts['t0']!).length).toBe(9)
+    // the two tabs that didn't fit stay open on their own
+    expect(s.openTabs.length).toBe(1 + 2)
+  })
+
+  it('TILE_TABS is a no-op with fewer than two open tabs', () => {
+    let s = withThree()
+    expect(reduce(s, { type: 'TILE_TABS' })).toBe(s)
+    expect(reduce(initialState(HOME), { type: 'TILE_TABS' })).toEqual(initialState(HOME))
+  })
+
+  it('TILE_TABS pulls a tab’s remembered focused pane, not just its anchor', () => {
+    let s = initialState(HOME)
+    for (const id of ['a', 'b', 'c']) s = reduce(s, { type: 'ADD_TERMINAL', terminal: term(id) })
+    s = open(s, ['a'])
+    s = reduce(s, { type: 'SPLIT_PANE', tabId: 'a', leafId: 'a', dir: 'h', newTerminalId: 'b' }) // tab 'a' now shows a|b, focused b
+    s = open(s, ['c']) // tab 'c' active
+    s = reduce(s, { type: 'TILE_TABS' }) // tiles into 'c': should pull 'b' (a's remembered focus), not 'a'
+    expect(leavesOf(s.layouts['c']!).sort()).toEqual(['b', 'c'])
+  })
+})
+
+describe('CC status', () => {
+  it('SET_CC replaces the terminal\'s cc field', () => {
+    let s = reduce(initialState(HOME), { type: 'ADD_TERMINAL', terminal: term('a') })
+    s = reduce(s, { type: 'SET_CC', id: 'a', cc: { status: 'working', unseen: false } })
+    expect(s.terminals['a']?.cc).toEqual({ status: 'working', unseen: false })
+    s = reduce(s, { type: 'SET_CC', id: 'a', cc: null })
+    expect(s.terminals['a']?.cc).toBeNull()
+  })
+
+  it('SET_CC on an unknown id is a no-op', () => {
+    const s0 = initialState(HOME)
+    expect(reduce(s0, { type: 'SET_CC', id: 'nope', cc: { status: 'working', unseen: false } })).toBe(s0)
+  })
+
+  it('SHOW_TERMINAL clears unseen and demotes needs-you to idle', () => {
+    let s = reduce(initialState(HOME), { type: 'ADD_TERMINAL', terminal: term('a') })
+    s = reduce(s, { type: 'SET_CC', id: 'a', cc: { status: 'needs-you', attention: 'done', unseen: true } })
+    s = reduce(s, { type: 'SHOW_TERMINAL', id: 'a' })
+    expect(s.terminals['a']?.cc).toEqual({ status: 'idle', attention: undefined, unseen: false })
+  })
+
+  it('SHOW_TERMINAL clears unseen even when the terminal is already the active tab', () => {
+    let s = reduce(initialState(HOME), { type: 'ADD_TERMINAL', terminal: term('a') })
+    s = reduce(s, { type: 'SHOW_TERMINAL', id: 'a' }) // already active/open/selected
+    s = reduce(s, { type: 'SET_CC', id: 'a', cc: { status: 'needs-you', attention: 'input', unseen: true } })
+    const after = reduce(s, { type: 'SHOW_TERMINAL', id: 'a' })
+    expect(after).not.toBe(s)
+    expect(after.terminals['a']?.cc?.unseen).toBe(false)
+  })
+
+  it('SHOW_TERMINAL leaves a non-needs-you cc status alone (e.g. working)', () => {
+    let s = reduce(initialState(HOME), { type: 'ADD_TERMINAL', terminal: term('a') })
+    s = reduce(s, { type: 'SET_CC', id: 'a', cc: { status: 'working', unseen: false } })
+    s = reduce(s, { type: 'SHOW_TERMINAL', id: 'a' })
+    expect(s.terminals['a']?.cc?.status).toBe('working')
+  })
+})
+
+
+describe('SET_THEME', () => {
+  it('updates settings.theme', () => {
+    const s = reduce(initialState(HOME), { type: 'SET_THEME', theme: 'ember' })
+    expect(s.settings.theme).toBe('ember')
+  })
+
+  it('no-ops when already that theme', () => {
+    const s0 = reduce(initialState(HOME), { type: 'SET_THEME', theme: 'graphite' })
+    expect(reduce(s0, { type: 'SET_THEME', theme: 'graphite' })).toBe(s0)
   })
 })
 

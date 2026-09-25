@@ -32,10 +32,18 @@ const api: DeckApi = {
   moveTerminal: (id, folderId) => ipcRenderer.invoke(CH.moveTerminal, id, folderId),
   selectFolder: (id) => ipcRenderer.invoke(CH.selectFolder, id),
   reorderTabs: (ids) => ipcRenderer.invoke(CH.reorderTabs, ids),
+  activateTab: (id) => ipcRenderer.invoke(CH.activateTab, id),
   showRowMenu: (id) => ipcRenderer.invoke(CH.showRowMenu, id),
   onRenameRequest: (cb) => on<[string]>(CH.renameRequest, cb),
   pathForFile: (file) => { try { return webUtils.getPathForFile(file) } catch { return '' } },
-  savePaste: (bytes, ext) => ipcRenderer.invoke(CH.savePaste, bytes, ext)
+  savePaste: (bytes, ext) => ipcRenderer.invoke(CH.savePaste, bytes, ext),
+  splitPane: (tabId, leafId, dir, side) => ipcRenderer.invoke(CH.splitPane, tabId, leafId, dir, side),
+  closeLeaf: (tabId, terminalId) => ipcRenderer.invoke(CH.closeLeaf, tabId, terminalId),
+  setRatio: (tabId, path, ratio) => ipcRenderer.send(CH.setRatio, tabId, path, ratio),
+  movePane: (terminalId, toTabId, targetLeafId, zone) => ipcRenderer.invoke(CH.movePane, terminalId, toTabId, targetLeafId, zone),
+  focusPane: (tabId, terminalId) => ipcRenderer.send(CH.focusPane, tabId, terminalId),
+  tileTabs: () => ipcRenderer.invoke(CH.tileTabs),
+  setTheme: (theme) => ipcRenderer.invoke(CH.setTheme, theme)
 }
 
 contextBridge.exposeInMainWorld('deck', api)

@@ -9,14 +9,18 @@ export const REMOVE_AFTER_MISSES = 3
 /** How long a removed terminal's title/folder are remembered so a quick re-adoption restores them. */
 export const TOMBSTONE_MS = 5 * 60 * 1000
 
+/** A terminal's foreground must miss `claude` this many consecutive polls before its stale `cc` is cleared. */
+export const CC_CLEAR_AFTER_MISSES = 3
+
 /** Cross-tick memory for reconcile: consecutive misses per id, and recently removed terminals. */
 export interface ReconcileMemo {
   misses: Map<string, number>
   tombstones: Map<string, { terminal: Terminal; at: number }>
+  ccMisses: Map<string, number>
 }
 
 export function newMemo(): ReconcileMemo {
-  return { misses: new Map(), tombstones: new Map() }
+  return { misses: new Map(), tombstones: new Map(), ccMisses: new Map() }
 }
 
 export function reconcile(terminals: Record<string, Terminal>, panes: PaneInfo[], now: number, memo: ReconcileMemo = newMemo(), removeAfter = REMOVE_AFTER_MISSES): Action[] {
@@ -48,6 +52,24 @@ export function reconcile(terminals: Record<string, Terminal>, panes: PaneInfo[]
     if (Object.keys(patch).length) {
       patch.lastActivity = now
       actions.push({ type: 'UPDATE_TERMINAL', id: p.id, patch })
+    }
+    // CC status is hook-driven, but if the hooks were never installed (or CC was killed
+    // without a SessionEnd hook firing) it must not linger forever: clear it once the pane's
+    // foreground hasn't been `claude` for a few consecutive polls.
+    if (t.cc) {
+      if (p.fgCommand === 'claude') {
+        memo.ccMisses.delete(p.id)
+      } else {
+        const misses = (memo.ccMisses.get(p.id) ?? 0) + 1
+        if (misses >= CC_CLEAR_AFTER_MISSES) {
+          memo.ccMisses.delete(p.id)
+          actions.push({ type: 'SET_CC', id: p.id, cc: null })
+        } else {
+          memo.ccMisses.set(p.id, misses)
+        }
+      }
+    } else {
+      memo.ccMisses.delete(p.id)
     }
   }
   for (const t of Object.values(terminals)) {

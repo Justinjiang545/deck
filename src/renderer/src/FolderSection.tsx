@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { DragEvent, JSX } from 'react'
-import { sortedFolders, type AppState, type Folder, type Terminal } from '../../shared/state'
+import { openTerminalIds, sortedFolders, type AppState, type Folder, type Terminal } from '../../shared/state'
 import TerminalRow from './TerminalRow'
 
 interface Props {
@@ -67,8 +67,10 @@ export default function FolderSection({
     }
   }
 
-  const shown = state.activeTabId
+  const shown = state.focusedTerminalId
+  const open = openTerminalIds(state)
   const collapsed = folder?.collapsed ?? false
+  const unseenCount = terminals.filter((t) => t.cc?.unseen).length
 
   const onDrop = (e: DragEvent<HTMLDivElement>): void => {
     e.preventDefault()
@@ -134,6 +136,7 @@ export default function FolderSection({
           <span className="folder__name">{folder ? folder.name : 'Unfiled'}</span>
         )}
         <span className="folder__count">{terminals.length}</span>
+        {collapsed && unseenCount > 0 && <span className="folder__badge" title={`${unseenCount} done, unseen`}>{unseenCount}</span>}
         {folder && (
           <button
             className="folder__x"
@@ -150,7 +153,7 @@ export default function FolderSection({
             key={t.id}
             terminal={t}
             active={t.id === shown}
-            open={state.openTabs.includes(t.id)}
+            open={open.has(t.id)}
             forceEdit={editingTerminalId === t.id}
             onEditDone={onTerminalEditDone}
             onShow={() => void window.deck.showTerminal(t.id)}
