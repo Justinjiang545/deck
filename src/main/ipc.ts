@@ -2,7 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { CH, type DropZone } from '../shared/ipc'
 import { placementFolder, SHELLS, sortedFolders, type ThemeName } from '../shared/state'
 import { countLeaves, leaves, MAX_PANES, type Dir, type PathStep, type Side } from '../shared/layout'
@@ -10,6 +10,13 @@ import type { Store } from './store'
 import type { Tmux } from './tmux'
 import type { PtyManager } from './pty'
 import { listProjects } from './projects'
+import { listCcSessions } from './sessions'
+
+/** Session ids go into a shell command line, so only accept the uuid-ish shape CC uses. */
+const SESSION_ID_RE = /^[A-Za-z0-9-]{8,64}$/
+
+/** Your most-typed replies to a waiting Claude session, offered on the row's right-click menu. */
+export const QUICK_REPLIES = ['continue', 'go ahead', 'yes'] as const
 
 export function registerIpc(deps: {
   store: Store
@@ -46,7 +53,8 @@ export function registerIpc(deps: {
     return true
   }
 
-  ipcMain.handle(CH.createTerminal, async (_e, cwd: string | null) => {
+  /** New tmux session at `cwd` (null → $HOME), shown in its own tab; optionally types `command` into its shell. */
+  async function spawnTerminal(cwd: string | null, command?: string): Promise<string> {
     const raw = cwd?.trim()
     const dir = raw ? raw.replace(/^~(?=$|\/)/, homedir()) : homedir()
     const id = randomUUID()
@@ -59,7 +67,34 @@ export function registerIpc(deps: {
     })
     if (raw) store.dispatch({ type: 'TOUCH_PROJECT', path: dir })
     store.dispatch({ type: 'SHOW_TERMINAL', id })
+    // Typed into the shell (not passed as the session command) so quitting claude leaves you
+    // at a normal prompt in the same terminal. zsh reads it as typeahead once it's up.
+    if (command) await tmux.sendLine(id, command).catch((err) => console.warn('[spawn] send command failed:', err))
     return id
+  }
+
+  ipcMain.handle(CH.createTerminal, (_e, cwd: string | null) => spawnTerminal(cwd))
+
+  ipcMain.handle(CH.createClaude, (_e, cwd: string | null) => spawnTerminal(cwd, 'claude'))
+
+  ipcMain.handle(CH.listSessions, () => {
+    const live = new Set(Object.values(store.state.terminals).map((t) => t.cc?.sessionId).filter(Boolean))
+    return listCcSessions(join(homedir(), '.claude', 'projects')).map((s) => ({ ...s, live: live.has(s.sessionId) }))
+  })
+
+  ipcMain.handle(CH.resumeSession, async (_e, sessionId: string, cwd: string) => {
+    if (!SESSION_ID_RE.test(sessionId)) throw new Error('bad session id')
+    // Already running in a deck terminal: just go there instead of forking a second copy.
+    const existing = Object.values(store.state.terminals).find((t) => t.cc?.sessionId === sessionId)
+    if (existing) { store.dispatch({ type: 'SHOW_TERMINAL', id: existing.id }); return existing.id }
+    // CC keys sessions by project dir, so resume must run where the session was started.
+    const dir = cwd && existsSync(cwd) ? cwd : null
+    return spawnTerminal(dir, `claude --resume ${sessionId}`)
+  })
+
+  ipcMain.handle(CH.sendLine, (_e, id: string, text: string) => {
+    if (!store.state.terminals[id] || typeof text !== 'string' || !text) return
+    return tmux.sendLine(id, text)
   })
 
   ipcMain.handle(CH.killTerminal, async (_e, id: string) => killTerminal(id))
@@ -211,6 +246,15 @@ export function registerIpc(deps: {
           }
         ]
       },
+      ...(t.cc || t.fgCommand === 'claude'
+        ? [
+            { type: 'separator' as const },
+            ...QUICK_REPLIES.map((text) => ({
+              label: `Reply “${text}”`,
+              click: () => { void tmux.sendLine(id, text).catch((err) => console.warn('[reply] failed:', err)) }
+            }))
+          ]
+        : []),
       { type: 'separator' },
       { label: 'Kill terminal', click: () => { void killTerminal(id) } }
     ]

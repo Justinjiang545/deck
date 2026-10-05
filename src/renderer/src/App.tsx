@@ -6,7 +6,9 @@ import SidebarRail from './SidebarRail'
 import TabBar from './TabBar'
 import SplitView from './SplitView'
 import Palette, { type PaletteItem } from './Palette'
-import type { ProjectEntry } from '../../shared/ipc'
+import type { ProjectEntry, ResumableSession } from '../../shared/ipc'
+import Logo from './Logo'
+import { ago } from './ago'
 import { sortedTerminals } from '../../shared/state'
 import { splitWouldBeTooSmall } from './paneSize'
 
@@ -16,7 +18,8 @@ const TOO_SMALL_HINT = 'Pane too small to split'
 
 export default function App(): JSX.Element {
   const state = useAppState()
-  const [picker, setPicker] = useState<ProjectEntry[] | null>(null)
+  const [picker, setPicker] = useState<{ mode: 'terminal' | 'claude'; projects: ProjectEntry[] } | null>(null)
+  const [sessions, setSessions] = useState<ResumableSession[] | null>(null)
   const [editingTerminalId, setEditingTerminalId] = useState<string | null>(null)
   const [capHint, setCapHint] = useState<string | null>(null)
   const capHintTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -38,15 +41,23 @@ export default function App(): JSX.Element {
     capHintTimer.current = setTimeout(() => setCapHint(null), PANE_CAP_HINT_MS)
   }, [])
 
-  const openPicker = useCallback(async () => {
+  const openPicker = useCallback(async (mode: 'terminal' | 'claude' = 'terminal') => {
     const projects = await window.deck.listProjects()
-    setPicker(projects)
+    setSessions(null)
+    setPicker({ mode, projects })
+  }, [])
+
+  const openResume = useCallback(async () => {
+    const list = await window.deck.listSessions()
+    setPicker(null)
+    setSessions(list)
   }, [])
 
   // createTerminal can reject (e.g. `tmux new-session` fails) — never let that surface as an
   // unhandled rejection; just log it and close the picker.
-  const createTerminal = useCallback((cwd: string | null) => {
-    window.deck.createTerminal(cwd).catch((err) => {
+  const createTerminal = useCallback((cwd: string | null, mode: 'terminal' | 'claude' = 'terminal') => {
+    const create = mode === 'claude' ? window.deck.createClaude : window.deck.createTerminal
+    create(cwd).catch((err) => {
       console.error('createTerminal failed', err)
       setPicker(null)
     })
@@ -91,6 +102,8 @@ export default function App(): JSX.Element {
     if (!e.metaKey || e.ctrlKey || e.altKey) return false
     const k = e.key.toLowerCase()
     if (k === 't' && !e.shiftKey) { void openPicker(); return true }
+    if (k === 'n' && !e.shiftKey) { void openPicker('claude'); return true }
+    if (k === 'r' && !e.shiftKey) { void openResume(); return true }
     if (k === 'b' && !e.shiftKey) { if (state) void window.deck.setSidebar(!state.sidebarOpen); return true }
     if (k === 'd') {
       const tabId = state?.activeTabId
@@ -152,7 +165,7 @@ export default function App(): JSX.Element {
       return true
     }
     return false
-  }, [openPicker, state, focusNeighborPane, showCapHint])
+  }, [openPicker, openResume, state, focusNeighborPane, showCapHint])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => { if (handleKey(e)) e.preventDefault() }
@@ -181,7 +194,7 @@ export default function App(): JSX.Element {
     if (e.metaKey && e.altKey && !e.ctrlKey && !e.shiftKey && /^Arrow(Left|Right|Up|Down)$/.test(e.code)) return false
     if (!e.metaKey || e.ctrlKey || e.altKey) return true
     const k = e.key.toLowerCase()
-    if ((k === 't' || k === 'b') && !e.shiftKey) return false
+    if ((k === 't' || k === 'b' || k === 'n' || k === 'r') && !e.shiftKey) return false
     if (k === 'w') return false
     if (k === 'd') return false
     if (k === 'n' && e.shiftKey) return false
@@ -195,7 +208,15 @@ export default function App(): JSX.Element {
 
   if (!state) return <div className="app" />
 
-  const items: PaletteItem[] = (picker ?? []).map((p) => ({ id: p.path, label: p.name, detail: p.path.replace(/^\/Users\/[^/]+/, '~') }))
+  const tilde = (p: string): string => p.replace(/^\/Users\/[^/]+/, '~')
+  const items: PaletteItem[] = (picker?.projects ?? []).map((p) => ({ id: p.path, label: p.name, detail: tilde(p.path) }))
+  const sessionItems: PaletteItem[] = (sessions ?? []).map((s) => ({
+    id: s.sessionId,
+    label: s.title ?? s.prompt ?? s.sessionId.slice(0, 8),
+    detail: [tilde(s.cwd) === '~' ? '~' : s.cwd.split('/').filter(Boolean).pop(), s.branch].filter(Boolean).join(' · '),
+    meta: ago(s.lastActive),
+    marked: s.live
+  }))
 
   return (
     <div className={'app' + (!state.sidebarOpen ? ' app--nosidebar' : '')}>
@@ -203,11 +224,13 @@ export default function App(): JSX.Element {
         <Sidebar
           state={state}
           onNew={() => void openPicker()}
+          onNewClaude={() => void openPicker('claude')}
+          onResume={() => void openResume()}
           editingTerminalId={editingTerminalId}
           onTerminalEditDone={() => setEditingTerminalId(null)}
         />
       ) : (
-        <SidebarRail state={state} onNew={() => void openPicker()} />
+        <SidebarRail state={state} onNew={() => void openPicker()} onNewClaude={() => void openPicker('claude')} />
       )}
       <main className="main">
         <TabBar state={state} />
@@ -227,28 +250,45 @@ export default function App(): JSX.Element {
           />
         ) : (
           <div className="empty">
-            <svg className="empty__icon" width="40" height="40" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <rect x="2.5" y="3.5" width="19" height="17" rx="2.5" stroke="currentColor" strokeWidth="1.3" />
-              <path d="M6.5 9l3.5 3-3.5 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M12 15h5.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-            </svg>
+            <Logo className="empty__icon" size={44} />
             <div className="empty__title">No terminal open</div>
-            <div className="empty__hint">⌘T to create one, or pick one on the left.</div>
-            <button className="btn empty__cta" onClick={() => void openPicker()} title="New terminal (⌘T)">+ Terminal</button>
+            <div className="empty__hint">Pick one on the left, or start something new.</div>
+            <div className="empty__actions">
+              <button className="btn" onClick={() => void openPicker()}>Terminal <kbd>⌘T</kbd></button>
+              <button className="btn" onClick={() => void openPicker('claude')}>Claude <kbd>⌘N</kbd></button>
+              <button className="btn" onClick={() => void openResume()}>Resume <kbd>⌘R</kbd></button>
+            </div>
           </div>
         )}
         {capHint && <div className="cap-hint">{capHint}</div>}
       </main>
       {picker && (
         <Palette
-          placeholder="Open terminal in project… (Esc = home)"
+          key={picker.mode}
+          placeholder={picker.mode === 'claude' ? 'Start Claude in project… (Esc = home)' : 'Open terminal in project… (Esc = home)'}
           items={items}
           onPick={(c) => {
             setPicker(null)
-            createTerminal('item' in c ? c.item.id : c.raw)
+            createTerminal('item' in c ? c.item.id : c.raw, picker.mode)
           }}
-          onClose={() => { setPicker(null); createTerminal(null) }}
+          onClose={() => { setPicker(null); createTerminal(null, picker.mode) }}
           onDismiss={() => setPicker(null)}
+        />
+      )}
+      {sessions && (
+        <Palette
+          placeholder="Resume a Claude session…"
+          items={sessionItems}
+          allowRawPath={false}
+          emptyText={sessions.length === 0 ? 'No Claude sessions found in ~/.claude/projects' : 'No matches'}
+          onPick={(c) => {
+            setSessions(null)
+            if (!('item' in c)) return
+            const s = sessions.find((x) => x.sessionId === c.item.id)
+            if (s) window.deck.resumeSession(s.sessionId, s.cwd).catch((err) => console.error('resumeSession failed', err))
+          }}
+          onClose={() => setSessions(null)}
+          onDismiss={() => setSessions(null)}
         />
       )}
     </div>

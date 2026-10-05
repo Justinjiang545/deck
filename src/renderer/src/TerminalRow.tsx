@@ -54,6 +54,11 @@ export default function TerminalRow({
   const dotClass = cc ? 'row__dot row__dot--cc-' + cc : 'row__dot row__dot--' + activityOf(terminal)
   const dotTitle = cc === 'working' ? 'Claude is working' : cc === 'done' ? 'Claude is done' : cc === 'input' ? 'Claude needs input' : cc === 'idle' ? 'Claude session idle' : activityOf(terminal) === 'idle' ? 'idle' : terminal.fgCommand
   const glyph = cc === 'done' ? '✓' : cc === 'input' ? '?' : ''
+  // Claude's last reply, so you can tell what each session said without switching to it.
+  // Markdown emphasis/code marks are noise at this size.
+  const snippet = cc && cc !== 'working' && terminal.cc?.lastMessage
+    ? terminal.cc.lastMessage.replace(/[*`#>_]+/g, '').replace(/\s+/g, ' ').trim()
+    : ''
 
   return (
     <div
@@ -81,7 +86,10 @@ export default function TerminalRow({
           onClick={(e) => e.stopPropagation()}
         />
       ) : (
-        <span className="row__title">{titleOf(terminal)}</span>
+        <span className="row__body">
+          <span className="row__title">{titleOf(terminal)}</span>
+          {snippet && <span className="row__snippet" title={terminal.cc?.lastMessage}>{snippet}</span>}
+        </span>
       )}
       <span className="row__sub">{terminal.fgCommand !== 'zsh' && terminal.customTitle ? terminal.fgCommand : ''}</span>
       <button className="row__x" title="Kill terminal" onClick={(e) => { e.stopPropagation(); onKill() }}>×</button>

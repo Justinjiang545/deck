@@ -43,7 +43,11 @@ const api: DeckApi = {
   movePane: (terminalId, toTabId, targetLeafId, zone) => ipcRenderer.invoke(CH.movePane, terminalId, toTabId, targetLeafId, zone),
   focusPane: (tabId, terminalId) => ipcRenderer.send(CH.focusPane, tabId, terminalId),
   tileTabs: () => ipcRenderer.invoke(CH.tileTabs),
-  setTheme: (theme) => ipcRenderer.invoke(CH.setTheme, theme)
+  setTheme: (theme) => ipcRenderer.invoke(CH.setTheme, theme),
+  createClaude: (cwd) => ipcRenderer.invoke(CH.createClaude, cwd),
+  listSessions: () => ipcRenderer.invoke(CH.listSessions),
+  resumeSession: (sessionId, cwd) => ipcRenderer.invoke(CH.resumeSession, sessionId, cwd),
+  sendLine: (id, text) => ipcRenderer.invoke(CH.sendLine, id, text)
 }
 
 contextBridge.exposeInMainWorld('deck', api)

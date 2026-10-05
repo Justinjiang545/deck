@@ -102,10 +102,20 @@ export default function TerminalPane({ terminalId, settings, keyFilter }: Props)
     } catch {
       console.warn('WebGL addon failed to load; falling back to canvas renderer')
     }
-    term.attachCustomKeyEventHandler((e) => keyFilter(e))
     fit.fit()
 
     let attached = false
+    term.attachCustomKeyEventHandler((e) => {
+      // Shift+Enter = newline without submitting. xterm sends a bare \r for it (identical to
+      // Enter), so send ESC+CR (Option+Enter) instead — what Claude Code's /terminal-setup
+      // configures — which CC reads as "insert newline" and zsh as a literal newline.
+      if (e.key === 'Enter' && e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        if (e.type === 'keydown' && attached) window.deck.ptyWrite(terminalId, '\x1b\r')
+        e.preventDefault()
+        return false
+      }
+      return keyFilter(e)
+    })
     const offData = window.deck.onPtyData((id, data) => { if (id === terminalId) term.write(data) })
     const offExit = window.deck.onPtyExit((id) => { if (id === terminalId) term.write('\r\n\x1b[2m[detached]\x1b[0m\r\n') })
     const onInput = term.onData((d) => { if (attached) window.deck.ptyWrite(terminalId, d) })

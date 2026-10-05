@@ -1,6 +1,7 @@
 import type { AppState, ThemeName } from './state'
 import type { Dir, PathStep, Side } from './layout'
 import type { ProjectEntry } from '../main/projects'
+import type { CcSession } from '../main/sessions'
 
 export type DropZone = 'left' | 'right' | 'top' | 'bottom' | 'center'
 
@@ -38,10 +39,15 @@ export const CH = {
   movePane: 'layout:movePane',
   focusPane: 'layout:focusPane',
   tileTabs: 'layout:tileTabs',
-  setTheme: 'settings:setTheme'
+  setTheme: 'settings:setTheme',
+  createClaude: 'terminal:createClaude',
+  listSessions: 'sessions:list',
+  resumeSession: 'sessions:resume',
+  sendLine: 'terminal:sendLine'
 } as const
 
 export type { ProjectEntry }
+export type ResumableSession = CcSession & { live: boolean }
 
 export interface DeckApi {
   getState(): Promise<AppState>
@@ -88,6 +94,14 @@ export interface DeckApi {
   /** ⌘⇧G: gather one terminal per open tab into the active tab as a balanced grid (up to MAX_PANES; extra tabs are left open). */
   tileTabs(): Promise<void>
   setTheme(theme: ThemeName): Promise<void>
+  /** ⌘N: new terminal at `cwd` (null → $HOME) that launches `claude`. */
+  createClaude(cwd: string | null): Promise<string>
+  /** Recent Claude Code sessions across all projects, newest first; `live` = already open in a deck terminal. */
+  listSessions(): Promise<ResumableSession[]>
+  /** Show the deck terminal running `sessionId`, or open a new one in `cwd` running `claude --resume`. */
+  resumeSession(sessionId: string, cwd: string): Promise<string>
+  /** Type a line into a terminal and press Enter (quick replies to a waiting Claude). */
+  sendLine(id: string, text: string): Promise<void>
 }
 
 declare global {

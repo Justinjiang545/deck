@@ -2,17 +2,20 @@ import { useEffect, useState } from 'react'
 import type { JSX } from 'react'
 import { sortedFolders, sortedTerminals, terminalsInFolder, type AppState, type ThemeName } from '../../shared/state'
 import FolderSection from './FolderSection'
+import Logo from './Logo'
 
 const THEME_ORDER: ThemeName[] = ['graphite', 'ember', 'tide', 'paper']
 
 interface Props {
   state: AppState
   onNew(): void
+  onNewClaude(): void
+  onResume(): void
   editingTerminalId: string | null
   onTerminalEditDone(): void
 }
 
-export default function Sidebar({ state, onNew, editingTerminalId, onTerminalEditDone }: Props): JSX.Element {
+export default function Sidebar({ state, onNew, onNewClaude, onResume, editingTerminalId, onTerminalEditDone }: Props): JSX.Element {
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null)
   const [dragging, setDragging] = useState(false)
 
@@ -56,17 +59,23 @@ export default function Sidebar({ state, onNew, editingTerminalId, onTerminalEdi
           <button className="sidebar__collapse" title="Minimize sidebar (⌘B)" aria-label="Minimize sidebar" onClick={() => void window.deck.setSidebar(false)}>
             <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><rect x="1.5" y="2.5" width="11" height="9" rx="2" fill="none" stroke="currentColor" /><path d="M5 2.5v9" stroke="currentColor" /><path d="M9 5.5 7.5 7 9 8.5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" /></svg>
           </button>
-          <span className="sidebar__brand">deck</span>
+          <span className="sidebar__brand"><Logo size={15} />deck</span>
         </div>
         <div className="sidebar__actions">
-          <button className="btn" onClick={onNew} title="New terminal (⌘T)">+ Terminal</button>
-          <button className="btn" onClick={newFolder} title="New folder (⌘⇧N)">+ Folder</button>
+          <button className="icon-btn" onClick={newFolder} title="New folder (⌘⇧N)" aria-label="New folder">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h2.6l1.4 1.5h5A1.5 1.5 0 0 1 14 6v5.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5z" /><path d="M8 7v3.5M6.25 8.75h3.5" /></svg>
+          </button>
           <button
             className="theme-swatch"
             onClick={cycleTheme}
             title={`Theme: ${state.settings.theme} (click to cycle)`}
           />
         </div>
+      </div>
+      <div className="sidebar__new">
+        <button className="btn" onClick={onNew} title="New terminal (⌘T)">+ Terminal</button>
+        <button className="btn" onClick={onNewClaude} title="New Claude session (⌘N)">+ Claude</button>
+        <button className="btn" onClick={onResume} title="Resume a Claude session (⌘R)">Resume</button>
       </div>
       <div className="sidebar__list">
         {folders.map((f) => (

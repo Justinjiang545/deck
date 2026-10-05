@@ -6,6 +6,10 @@ export interface PaletteItem {
   id: string
   label: string
   detail?: string
+  /** Right-aligned, de-emphasized (e.g. "3h"). */
+  meta?: string
+  /** Small accent marker before the label (e.g. an already-open session). */
+  marked?: boolean
 }
 
 interface Props {
@@ -17,14 +21,17 @@ interface Props {
   onClose(): void
   /** Click outside the palette (backdrop): just hides the palette, no terminal is created. */
   onDismiss(): void
+  /** Treat a query starting with / or ~ as a raw path (project pickers). Default true. */
+  allowRawPath?: boolean
+  emptyText?: string
 }
 
-export default function Palette({ placeholder, items, onPick, onClose, onDismiss }: Props): JSX.Element {
+export default function Palette({ placeholder, items, onPick, onClose, onDismiss, allowRawPath = true, emptyText }: Props): JSX.Element {
   const [q, setQ] = useState('')
   const [idx, setIdx] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
   const filtered = useMemo(() => fuzzyFilter(q, items, (i) => i.label + ' ' + (i.detail ?? '')), [q, items])
-  const isPath = /^[~/]/.test(q)
+  const isPath = allowRawPath && /^[~/]/.test(q)
 
   useEffect(() => { inputRef.current?.focus() }, [])
   useEffect(() => { setIdx(0) }, [q])
@@ -63,11 +70,12 @@ export default function Palette({ placeholder, items, onPick, onClose, onDismiss
               onMouseEnter={() => setIdx(i)}
               onClick={() => onPick({ item: it })}
             >
-              <span className="palette__label">{it.label}</span>
+              <span className="palette__label">{it.marked && <span className="palette__mark" title="Open in deck" />}{it.label}</span>
               {it.detail && <span className="palette__detail">{it.detail}</span>}
+              {it.meta && <span className="palette__meta">{it.meta}</span>}
             </div>
           ))}
-          {!isPath && filtered.length === 0 && <div className="palette__empty">No matches — type a path starting with / or ~</div>}
+          {!isPath && filtered.length === 0 && <div className="palette__empty">{emptyText ?? 'No matches — type a path starting with / or ~'}</div>}
         </div>
       </div>
     </div>

@@ -84,6 +84,15 @@ export function sendKeysArgs(o: TmuxOpts, id: string, text: string): string[] {
   return [...baseArgs(o), 'send-keys', '-t', '=' + sessionName(id) + ':', text, 'Enter']
 }
 
+/** `-l`: the text is typed literally, never parsed as key names (e.g. a reply of "Enter" or "C-c"). */
+export function sendLiteralArgs(o: TmuxOpts, id: string, text: string): string[] {
+  return [...baseArgs(o), 'send-keys', '-t', '=' + sessionName(id) + ':', '-l', text]
+}
+
+export function sendEnterArgs(o: TmuxOpts, id: string): string[] {
+  return [...baseArgs(o), 'send-keys', '-t', '=' + sessionName(id) + ':', 'Enter']
+}
+
 export interface PaneInfo {
   id: string
   pid: number
@@ -167,6 +176,17 @@ export class Tmux {
 
   async sendKeys(id: string, text: string): Promise<void> {
     await this.exec(sendKeysArgs(this.o, id, text))
+  }
+
+  /**
+   * Type `text` then press Enter as two separate tmux calls: a TUI like Claude Code that sees
+   * the text and the Enter in one burst can treat the burst as a paste and keep the newline in
+   * its input box instead of submitting.
+   */
+  async sendLine(id: string, text: string): Promise<void> {
+    await this.exec(sendLiteralArgs(this.o, id, text))
+    await new Promise((r) => setTimeout(r, 60))
+    await this.exec(sendEnterArgs(this.o, id))
   }
 
   async hasServer(): Promise<boolean> {

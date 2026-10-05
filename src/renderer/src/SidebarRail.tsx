@@ -5,13 +5,14 @@ import { leaves } from '../../shared/layout'
 interface Props {
   state: AppState
   onNew(): void
+  onNewClaude(): void
 }
 
 /**
  * Minimized sidebar (⌘B): one status dot per terminal so a finished/waiting agent is still
  * visible at a glance, plus expand and new-terminal buttons. Click a dot to show that terminal.
  */
-export default function SidebarRail({ state, onNew }: Props): JSX.Element {
+export default function SidebarRail({ state, onNew, onNewClaude }: Props): JSX.Element {
   const visible = new Set(leaves(state.layout))
   return (
     <aside className="rail">
@@ -20,6 +21,7 @@ export default function SidebarRail({ state, onNew }: Props): JSX.Element {
         <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><rect x="1.5" y="2.5" width="11" height="9" rx="2" fill="none" stroke="currentColor" /><path d="M5 2.5v9" stroke="currentColor" /><path d="M7.5 5.5 9 7l-1.5 1.5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" /></svg>
       </button>
       <button className="rail__btn" title="New terminal (⌘T)" aria-label="New terminal" onClick={onNew}>+</button>
+      <button className="rail__btn" title="New Claude session (⌘N)" aria-label="New Claude session" onClick={onNewClaude}>✻</button>
       <div className="rail__list">
         {sortedTerminals(state).map((t) => {
           const cc = ccVisualOf(t)

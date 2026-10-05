@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 import {
   childEnv, LIST_FORMAT,
   sessionName, idFromSession, findTmux, baseArgs, newSessionArgs, attachArgs,
-  capturePaneArgs, listPanesArgs, sendKeysArgs, parseListPanes, Tmux
+  capturePaneArgs, listPanesArgs, sendKeysArgs, sendLiteralArgs, sendEnterArgs, parseListPanes, Tmux
 } from '../src/main/tmux'
 
 const o = { bin: '/opt/homebrew/bin/tmux', conf: '/x/deck.conf' }
@@ -17,6 +17,11 @@ describe('names', () => {
 })
 
 describe('argv builders', () => {
+  it('sendLiteralArgs types text literally (-l) into the exact session; Enter is separate', () => {
+    expect(sendLiteralArgs(o, 'abc', 'Enter')).toEqual([...baseArgs(o), 'send-keys', '-t', '=deck-abc:', '-l', 'Enter'])
+    expect(sendEnterArgs(o, 'abc')).toEqual([...baseArgs(o), 'send-keys', '-t', '=deck-abc:', 'Enter'])
+  })
+
   it('baseArgs uses private socket and config', () => {
     expect(baseArgs(o)).toEqual(['-u', '-L', 'deck', '-f', '/x/deck.conf'])
   })
