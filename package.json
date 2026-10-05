@@ -51,6 +51,11 @@
       {
         "from": "resources/deck.conf",
         "to": "deck.conf"
+      },
+      {
+        "from": "resources/brand",
+        "to": "brand",
+        "filter": ["*.png"]
       }
     ],
     "asarUnpack": [
@@ -59,6 +64,7 @@
     "mac": {
       "target": "dir",
       "identity": null,
+      "icon": "resources/brand/deck.icns",
       "category": "public.app-category.developer-tools"
     },
     "npmRebuild": false

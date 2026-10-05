@@ -13,6 +13,7 @@ import { CH } from '../shared/ipc'
 import { installHooks, writeHookScript } from './hookInstall'
 import { startHooksServer, type HooksServerHandle } from './hooksServer'
 import { notifyAttention, updateDockBadge } from './notify'
+import { brandDir, createTray, type TrayHandle } from './tray'
 
 let win: BrowserWindow | null = null
 
@@ -56,8 +57,13 @@ function confPath(): string {
 }
 
 let hooksServerRef: HooksServerHandle | null = null
+let trayRef: TrayHandle | null = null
 
 async function boot(): Promise<void> {
+  // Packaged builds get the .icns from electron-builder; in dev, show the same icon in the Dock.
+  if (!app.isPackaged && process.platform === 'darwin' && app.dock) {
+    try { app.dock.setIcon(join(brandDir(), 'deck-icon-1024.png')) } catch { /* cosmetic */ }
+  }
   const bin = findTmux()
   if (!bin) {
     await dialog.showMessageBox({ type: 'error', message: 'tmux not found', detail: 'Install it with:  brew install tmux\nThen relaunch deck.' })
@@ -100,6 +106,19 @@ async function boot(): Promise<void> {
 
   registerIpc({ store, tmux, ptys, win: () => win, send })
   win = createWindow()
+
+  const showWindow = (): void => {
+    if (!win || win.isDestroyed()) win = createWindow()
+    win.show()
+    win.focus()
+  }
+  try {
+    trayRef = createTray({ show: showWindow, showTerminal: (id) => store.dispatch({ type: 'SHOW_TERMINAL', id }) })
+    trayRef.update(store.state)
+    store.subscribe((s) => trayRef?.update(s))
+  } catch (err) {
+    console.warn('[boot] tray unavailable:', err)
+  }
   const stopPoller = startPoller(tmux, store)
 
   // Hook install/script write is best-effort and must never block boot: a stale or unwritable
@@ -138,6 +157,7 @@ async function boot(): Promise<void> {
   app.on('before-quit', () => {
     stopPoller()
     hooksServerRef?.close()
+    trayRef?.destroy()
     ptys.detachAll()
     saver.flush()
   })

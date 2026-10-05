@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="currentColor" role="img" aria-label="deck">
+  <defs>
+    <mask id="deck-mark-prompt">
+      <rect width="32" height="32" fill="#fff"/>
+      <path d="M8.5 16.5l4 3.5-4 3.5" fill="none" stroke="#000" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+      <rect x="15" y="22" width="7" height="2.2" rx="1.1" fill="#000"/>
+    </mask>
+  </defs>
+  <rect x="8" y="3" width="16" height="2.4" rx="1.2"/>
+  <rect x="5" y="6.8" width="22" height="2.4" rx="1.2"/>
+  <rect x="2" y="10.6" width="28" height="18.4" rx="4.5" mask="url(#deck-mark-prompt)"/>
+</svg>
